@@ -96,10 +96,10 @@ Desktop attaches to `hermes-serve.service`, a user unit of the admin account tha
 (Tailscale-issued certificate, `httpsEnabled` on the tailnet). Only the owner's devices reach tcp/443 (tailnet policy and
 nftables); nothing is reachable from the internet. The dashboard token is the second factor.
 
-In Desktop: Settings, Gateways, Add, Remote gateway, the URL above, authentication Session token. Read the token once:
-`ssh hermesops@hermes sudo cat /etc/hermes-dashboard/session-token`. Rotate by deleting that file, applying `--tags serve`
-and pasting the new value. Opening the URL in a browser shows "Token-gated dashboard": that is expected, there is no browser
-sign-in.
+In Desktop: Settings, Gateways, Add, Remote gateway, the URL above, then Sign in with user `camilo` and the generated password.
+Read the password once: `ssh hermesops@hermes sudo cat /etc/hermes-dashboard/password`. Only its scrypt hash and a signing
+secret are in `/etc/hermes-dashboard/serve.env` (readable by the service group). Rotate by deleting `serve.env` and `password`,
+applying `--tags serve` and restarting `hermes-serve`. Opening the URL in a browser works too, through the same sign-in page.
 
 ## Worker (tier 1)
 

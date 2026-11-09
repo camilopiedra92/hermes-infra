@@ -1,26 +1,30 @@
 ---
-# The loopback backend for Hermes Desktop. The credential is a random token that only the owner's tunnel can use.
-- name: Create the directory of the Desktop token
+# The loopback backend for Hermes Desktop. The login is a random password; only its scrypt hash reaches the service.
+- name: Create the directory of the Desktop login
   ansible.builtin.file:
-    path: "{{ hermes_gateway_serve_token | dirname }}"
+    path: "{{ hermes_gateway_serve_dir }}"
     state: directory
     owner: root
     group: "{{ hermes_pins.state.owner }}"
     mode: "0750"
 
-- name: Generate the Desktop token once
-  ansible.builtin.shell:
-    cmd: umask 077 && openssl rand -hex 32 > '{{ hermes_gateway_serve_token }}'
-    creates: "{{ hermes_gateway_serve_token }}"
-  no_log: true
-
-- name: Keep the Desktop token readable by the service user only
-  ansible.builtin.file:
-    path: "{{ hermes_gateway_serve_token }}"
+- name: Install the credential generator
+  ansible.builtin.copy:
+    src: hermes-dashboard-credentials
+    dest: /usr/local/sbin/hermes-dashboard-credentials
     owner: root
-    group: "{{ hermes_pins.state.owner }}"
-    mode: "0640"
-  when: not ansible_check_mode
+    group: root
+    mode: "0750"
+
+- name: Create the Desktop login once (random password, only its hash goes to the service)
+  ansible.builtin.command:
+    argv:
+      - /usr/local/sbin/hermes-dashboard-credentials
+      - "{{ hermes_gateway_serve_dir }}"
+      - "{{ hermes_pins.state.owner }}"
+      - "{{ hermes_gateway_serve_user }}"
+    creates: "{{ hermes_gateway_serve_dir }}/serve.env"
+  no_log: true
 
 - name: Read the tailnet name of this host (never stored in git)
   ansible.builtin.command: tailscale status --self --json
