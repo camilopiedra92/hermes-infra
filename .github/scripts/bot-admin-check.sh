@@ -39,9 +39,9 @@ echo "ok: account without password, key 0600 owned by the service user, sudoers 
 [ "$(admin_ssh id -un)" = hermesadmin ] || fail "the service user cannot log in as hermesadmin"
 [ "$(admin_ssh sudo -n id -u)" = 0 ] || fail "hermesadmin cannot become root"
 echo "ok: the service user logs in over 127.0.0.1 with its key (host key pinned) and becomes root"
-find /var/log/sudo-io/hermesadmin -name log -type f | grep -q . || fail "sudo kept no I/O log for the account"
 grep -q 'USER=root' /var/log/sudo-hermesops.log || fail "sudo wrote no line to the text log"
-echo "ok: sudo input and output are logged under /var/log/sudo-io/hermesadmin"
+[ -z "$(find /var/log/sudo-io -path '*hermesadmin*' -type f 2>/dev/null)" ] || fail "sudo recorded the input or output of the bot account"
+echo "ok: sudo logs the commands of the bot account as text and does not record its input and output"
 
 # The git credential helper answers for github.com from the delivered file, and for nothing else. The token here is a canary.
 install -d -m 0700 -o hermesadmin -g hermesadmin /home/hermesadmin/.config/hermes

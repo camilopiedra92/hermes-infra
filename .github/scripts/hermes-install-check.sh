@@ -228,7 +228,7 @@ import hermes_bootstrap
 logging.disable(logging.CRITICAL)
 from agent.prompt_builder import build_context_files_prompt
 out = build_context_files_prompt(cwd='$HERMES_HOME_DIR', skip_soul=True, context_length=1000000)
-print('blocked' if 'BLOCKED' in out else 'loaded', 'Briefing for the Hermes bot' in out, len(out))")
+print('blocked' if 'BLOCKED' in out else 'loaded', 'Briefing for the admin bot' in out, len(out))")
 echo "context from the gateway's working directory (state, has the briefing, characters): $BRIEFED"
 case "$BRIEFED" in "loaded True "*) ;; *) fail "Hermes does not load the briefing as the context file";; esac
 echo "::endgroup::"
