@@ -82,3 +82,26 @@
     - podman-auto-update.timer
     - podman-auto-update.service
     - podman-restart.service
+
+# The accounts of the agent tiers share this host. A process must not see the command line or the open files of another
+# account, and a file one account writes must not be readable by the others.
+- name: Hide the processes of other accounts (hidepid)
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^proc\s+/proc\s'
+    line: proc /proc proc nosuid,nodev,noexec,hidepid=2 0 0
+  notify: Remount /proc with hidepid
+
+- name: Make new files private to their owner by default (umask 027 and user private groups)
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^UMASK\s'
+    line: UMASK           027
+
+- name: Clean /tmp of files that nobody touched for three days
+  ansible.builtin.copy:
+    src: tmp.conf
+    dest: /etc/tmpfiles.d/tmp.conf
+    owner: root
+    group: root
+    mode: "0644"
