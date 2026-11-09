@@ -106,7 +106,6 @@ class TierDefinitionTests(unittest.TestCase):
         template = (ROLE / "templates" / "managed-config.yaml.j2").read_text(encoding="utf-8")
         self.assertIn("trust: untrusted", template)
         self.assertNotIn("client_secret: \"", template.replace('"${GOOGLE_OAUTH_CLIENT_SECRET}"', ""))
-        self.assertNotIn("serve_port", assistant, "the Desktop backend of a tier is opt-in, with its own ACL and firewall port")
 
 
 if __name__ == "__main__":

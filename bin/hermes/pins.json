@@ -155,7 +155,9 @@
           "url": "https://calendarmcp.googleapis.com/mcp/v1",
           "oauth_client": true
         }
-      }
+      },
+      "serve_port": 9121,
+      "serve_https_port": 8444
     }
   },
   "model": {

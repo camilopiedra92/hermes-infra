@@ -42,9 +42,9 @@ entry is rewritten, not kept as history (git has the history).
 14. **Observability without a model.** A systemd collector and a no-agent Hermes cron job report state changes to Telegram.
 15. **One Desktop connection per trust tier.** Hermes Desktop lists the bots of every registered gateway side by side and keeps
     mentions and delegation gateway-local, because crossing a backend changes filesystem, credentials, tools and trust (official
-    multi-connection documentation). So each tier exposes its own loopback `hermes serve` (admin on 9119, worker on 9120),
-    published by Tailscale Serve on its own HTTPS port (443, 8443) with its own sign-in, and the owner registers both as
-    gateways. Bots of the same tier are profiles of that tier's instance. Putting a worker bot into the admin instance as a
+    multi-connection documentation). So each tier exposes its own loopback `hermes serve` (admin on 9119, worker on 9120, assistant on 9121),
+    published by Tailscale Serve on its own HTTPS port (443, 8443, 8444) with its own sign-in, and the owner registers each as a
+    gateway. Bots of the same tier are profiles of that tier's instance. Putting a worker bot into the admin instance as a
     profile was rejected: profiles share one Linux account, so it would share the admin's credentials and host access.
 16. **The worker image is pinned by digest, and runs by image ID.** The admin pulls `python@sha256:<amd64 manifest>` and the
     worker loads it offline (it has no registry egress). A save and load recompress the layers, so a registry digest cannot
