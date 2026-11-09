@@ -115,7 +115,7 @@ are in `<login files>/serve.env` (readable by the service group). Rotate by dele
 `hermesadmin` reaches the internet through `tinyproxy-ops` (`127.0.0.1:8891`, TLS to named hosts only); sshd sets `HTTPS_PROXY`
 for that account and nftables (`hermes_ops`) drops everything else (`--tags ops_egress`). Refusals are in
 `journalctl -u tinyproxy-ops`, drops in `sudo nft list counters` (`ops_held`). A tool that fails with a connection error or a
-proxy refusal needs its host in `admin.egress.domains` (pull request, then `--tags ops_egress`); never add a general-purpose
+proxy refusal needs its host in `admin.egress.domains` (the logs of a CI job are on `productionresultssa<N>.blob.core.windows.net`, GitHub's own storage accounts 0 to 19, listed one by one) (pull request, then `--tags ops_egress`); never add a general-purpose
 host (paste, gist, file sharing). To read anything that is not on the list, ask the worker:
 
 ```sh
