@@ -159,7 +159,9 @@
       "subid_start": 362144,
       "subid_count": 65536,
       "containers_bytes": 3221225472,
-      "containers_inodes": 196608
+      "containers_inodes": 196608,
+      "serve_port": 9121,
+      "serve_https_port": 8444
     }
   },
   "model": {
