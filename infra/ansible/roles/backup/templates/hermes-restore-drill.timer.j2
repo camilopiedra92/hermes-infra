@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Monthly restore drill of the Hermes backup
+
+[Timer]
+OnCalendar={{ backup_drill_on_calendar }}
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

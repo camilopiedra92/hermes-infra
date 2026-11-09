@@ -1,0 +1,20 @@
+# {{ ansible_managed }}
+# Restores the latest snapshot into scratch space and verifies it. Read-only against R2, never touches live state.
+[Unit]
+Description=Restore drill of the Hermes backup (restic on R2)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hermes-backup drill
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths={{ backup_state_dir }}
+NoNewPrivileges=true
+CacheDirectory=hermes-backup
+Environment=RESTIC_CACHE_DIR=/var/cache/hermes-backup
+Environment=HERMES_BACKUP_STATES={{ backup_state_paths | join(':') }}
