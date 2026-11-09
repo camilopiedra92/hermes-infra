@@ -385,7 +385,7 @@
     src: hermes-ask-tier.j2
     dest: "/usr/local/bin/hermes-ask-{{ hermes_tier_name }}"
     owner: root
-    group: "{{ hermes_pins.admin.user }}"
+    group: "{{ hermes_pins.state.owner }}"
     mode: "0750"
     validate: sh -n %s
   when: hermes_tier_def.ask_helper | default(false)

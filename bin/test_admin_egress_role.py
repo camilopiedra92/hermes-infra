@@ -84,10 +84,10 @@ class AskHelperTests(unittest.TestCase):
         self.assertRegex(self.TEMPLATE, r"echo \"=== END OF UNTRUSTED OUTPUT")
         self.assertIn('exit "$status"', self.TEMPLATE)
 
-    def test_the_helper_is_usable_by_the_administration_account_only(self) -> None:
+    def test_the_helper_is_usable_by_the_admin_bot_account_only(self) -> None:
         tasks = (ROOT / "infra" / "ansible" / "roles" / "hermes_tier" / "tasks" / "main.yml").read_text(encoding="utf-8")
         block = tasks[tasks.index("Install the helper that lets"):]
-        self.assertIn('group: "{{ hermes_pins.admin.user }}"', block)
+        self.assertIn('group: "{{ hermes_pins.state.owner }}"', block)
         self.assertIn('mode: "0750"', block)
         self.assertIn("validate: sh -n %s", block)
 

@@ -37,17 +37,13 @@ platform_toolsets:
     - cronjob
     - skills
 
-# Commands run on the host as the administrator account, over SSH on loopback. The key is the
-# service user's own, the host key is pinned in `~/.ssh/known_hosts`, and `Host hermes-admin` in `~/.ssh/config`
-# (written by the bot_admin role) resolves to 127.0.0.1 and refuses a changed key. Not the `local` backend: the
-# gateway's own identity keeps no shell of its own.
+# Commands run on the host as the bot's own account, held by its egress proxy (nftables drops the rest). Root is not the
+# account's: it comes from sudo (role operator), which logs every command as text and which the owner can take away with
+# `hermes-admin-access off`. This is Hermes' `local` backend, the one the documentation names for a trusted operator on
+# a dedicated host; the dangerous-command approvals below apply to it as they do to every backend.
 terminal:
-  backend: ssh
-  ssh_host: hermes-admin
-  ssh_user: hermesadmin
-  ssh_port: 22
-  ssh_key: /home/hermes/.ssh/hermes-admin
-  cwd: /home/hermesadmin
+  backend: local
+  cwd: /home/hermes
   persistent_shell: true
 
 # Skills are how the bot learns (owner, 2026-11-09: it must improve by itself). An injected instruction would
