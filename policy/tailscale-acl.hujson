@@ -5,7 +5,7 @@
 // Design:
 //   * The host is tag:hermes-prod. Tag owners: the owner's identity only.
 //     tag:hermes is the retired 2026-11-06 name and is not reintroduced.
-//   * The owner's human devices reach tag:hermes-prod on tcp/22 (OpenSSH) and tcp/443 (Tailscale Serve, Hermes Desktop).
+//   * The owner's human devices reach tag:hermes-prod on tcp/22 (OpenSSH), tcp/443 and tcp/8443 (Tailscale Serve: Hermes Desktop for the admin and the worker bots).
 //   * Operator sessions (tag:hermes-ops, minted by the owner) reaches tag:hermes-prod on tcp/22 only.
 //   * No CI identity reaches the host.
 //   * No grant from the host toward any other tailnet device.
@@ -30,7 +30,7 @@
 		{
 			"src": ["camilopiedra92@gmail.com"],
 			"dst": ["tag:hermes-prod"],
-			"ip":  ["tcp:22", "tcp:443"],
+			"ip":  ["tcp:22", "tcp:443", "tcp:8443"],
 		},
 		// Diagnosis box.
 		{
@@ -61,13 +61,13 @@
 	"tests": [
 		{
 			"src":    "camilopiedra92@gmail.com",
-			"accept": ["tag:hermes-prod:22", "tag:hermes-prod:443"],
+			"accept": ["tag:hermes-prod:22", "tag:hermes-prod:443", "tag:hermes-prod:8443"],
 			"deny":   ["tag:hermes-prod:80", "tag:hermes-prod:8080", "tag:hermes-ops:22"],
 		},
 		{
 			"src":    "tag:hermes-ops",
 			"accept": ["tag:hermes-prod:22"],
-			"deny":   ["tag:hermes-prod:80", "tag:hermes-prod:443", "tag:hermes-prod:5432"],
+			"deny":   ["tag:hermes-prod:80", "tag:hermes-prod:443", "tag:hermes-prod:8443", "tag:hermes-prod:5432"],
 		},
 		{
 			"src":  "tag:hermes-prod",
