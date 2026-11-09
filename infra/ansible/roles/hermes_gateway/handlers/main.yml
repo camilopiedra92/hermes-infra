@@ -3,3 +3,16 @@
   ansible.builtin.command:
     argv: [systemctl, --user, "--machine={{ hermes_pins.state.owner }}@.host", daemon-reload]
   changed_when: true
+
+- name: Restart the backend
+  ansible.builtin.systemd_service:
+    name: hermes-serve.service
+    scope: user
+    state: restarted
+  become: true
+  become_user: "{{ hermes_pins.state.owner }}"
+  vars:
+    ansible_remote_tmp: "/tmp/.ansible-{{ hermes_pins.state.owner }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ hermes_gateway_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ hermes_gateway_uid }}/bus"

@@ -22,6 +22,12 @@
     mode: "0640"
   when: not ansible_check_mode
 
+- name: Read the tailnet name of this host (never stored in git)
+  ansible.builtin.command: tailscale status --self --json
+  register: hermes_gateway_tailscale_self
+  changed_when: false
+  check_mode: false
+
 - name: Install the backend unit
   ansible.builtin.template:
     src: hermes-serve.service.j2
@@ -29,10 +35,19 @@
     owner: root
     group: root
     mode: "0644"
-  notify: Reload user units
+  vars:
+    hermes_gateway_serve_url: >-
+      https://{{ (hermes_gateway_tailscale_self.stdout | from_json).Self.DNSName.rstrip('.') }}
+  notify:
+    - Reload user units
+    - Restart the backend
 
 - name: Apply the unit before it is enabled
   ansible.builtin.meta: flush_handlers
+
+- name: Publish the backend inside the tailnet over HTTPS (Tailscale Serve, no public exposure)
+  ansible.builtin.command: tailscale serve --bg --yes --https=443 http://127.0.0.1:{{ hermes_gateway_serve_port }}
+  changed_when: false
 
 - name: Enable the backend at boot and keep it running
   ansible.builtin.systemd_service:

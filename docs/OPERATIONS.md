@@ -91,17 +91,15 @@ Secrets are never in git, never printed, and files holding them are mode 0600.
 
 ## Hermes Desktop
 
-The Desktop app attaches to `hermes-serve.service`, a user unit of the admin account that listens on `127.0.0.1:9119` only
-(`--tags serve`). No port is opened on the tailnet. The path in is an SSH tunnel over Tailscale SSH, so the real
-authentication is the owner's Tailscale identity; the dashboard token is the second factor.
+Desktop attaches to `hermes-serve.service`, a user unit of the admin account that listens on `127.0.0.1:9119` only
+(`--tags serve`). Tailscale Serve publishes it inside the tailnet over HTTPS at `https://<host>.<tailnet>.ts.net`
+(Tailscale-issued certificate, `httpsEnabled` on the tailnet). Only the owner's devices reach tcp/443 (tailnet policy and
+nftables); nothing is reachable from the internet. The dashboard token is the second factor.
 
-```sh
-ssh -N -L 9119:127.0.0.1:9119 hermesops@hermes          # keep it open
-ssh hermesops@hermes sudo cat /etc/hermes-dashboard/session-token   # the token, once
-```
-
-In Desktop: Settings, Gateways, Add, Remote gateway, URL `http://127.0.0.1:9119`, authentication Session token. Rotate by
-deleting `/etc/hermes-dashboard/session-token`, applying `--tags serve`, restarting `hermes-serve` and pasting the new one.
+In Desktop: Settings, Gateways, Add, Remote gateway, the URL above, authentication Session token. Read the token once:
+`ssh hermesops@hermes sudo cat /etc/hermes-dashboard/session-token`. Rotate by deleting that file, applying `--tags serve`
+and pasting the new value. Opening the URL in a browser shows "Token-gated dashboard": that is expected, there is no browser
+sign-in.
 
 ## Worker (tier 1)
 
