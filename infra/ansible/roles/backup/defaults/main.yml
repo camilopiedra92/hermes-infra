@@ -4,3 +4,8 @@ backup_on_calendar: "*-*-* 07:00:00 UTC"   # 02:00 America/Bogota
 backup_randomized_delay: 15min
 backup_env_dir: /etc/hermes-backup
 backup_state_dir: /var/lib/hermes-backup
+# The state of the admin and of every agent tier. Secrets in these homes are never read: the file list is an allowlist.
+backup_state_paths: >-
+  {{ ['/home/hermes/.hermes']
+     + (hermes_pins.tiers.values() | map(attribute='user')
+        | map('regex_replace', '^', '/home/') | map('regex_replace', '$', '/.hermes') | list) }}

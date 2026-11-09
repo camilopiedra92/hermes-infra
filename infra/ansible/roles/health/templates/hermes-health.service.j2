@@ -9,3 +9,4 @@ ProtectSystem=strict
 ReadWritePaths=/var/lib/hermes-health
 PrivateTmp=true
 NoNewPrivileges=false
+Environment=HERMES_TIERS={% for name, tier in hermes_pins.tiers.items() %}{{ name }}:{{ tier.user }}{{ "," if not loop.last }}{% endfor %}

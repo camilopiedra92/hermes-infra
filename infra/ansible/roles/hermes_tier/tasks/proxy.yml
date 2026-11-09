@@ -1,0 +1,40 @@
+---
+# The tier has its own proxy so that the names it needs (web search) never widen the admin account's allowlist.
+- name: Install the tier proxy configuration
+  ansible.builtin.template:
+    src: tinyproxy-tier.conf.j2
+    dest: /etc/tinyproxy/tinyproxy-{{ hermes_tier_name }}.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "Restart the proxy of {{ hermes_tier_name }}"
+
+- name: Install the list of names the tier may reach
+  ansible.builtin.template:
+    src: tinyproxy-tier-allow.filter.j2
+    dest: /etc/tinyproxy/hermes-{{ hermes_tier_name }}-allow.filter
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "Restart the proxy of {{ hermes_tier_name }}"
+
+- name: Install the tier proxy unit
+  ansible.builtin.template:
+    src: tinyproxy-tier.service.j2
+    dest: /etc/systemd/system/tinyproxy-{{ hermes_tier_name }}.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - "Restart the proxy of {{ hermes_tier_name }}"
+
+- name: Apply the unit and the proxy before the tier gateway can start
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the tier proxy
+  ansible.builtin.systemd_service:
+    name: tinyproxy-{{ hermes_tier_name }}.service
+    enabled: true
+    state: started
+  when: not ansible_check_mode

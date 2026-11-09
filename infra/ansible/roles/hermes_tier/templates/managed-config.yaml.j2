@@ -1,6 +1,6 @@
 # {{ ansible_managed }}
-# Hermes managed scope for the tier-1 worker (docs/ARCHITECTURE.md). Owned by root in /etc/hermes-worker.
-# The worker reads untrusted content and holds no credential: its tools run in a rootless container, never on the host.
+# Hermes managed scope for the {{ hermes_tier_name }} tier (docs/ARCHITECTURE.md). Owned by root in /etc/hermes-{{ hermes_tier_name }}.
+# This tier reads untrusted content and holds no host or cloud credential{{ ': its tools run in a rootless container, never on the host' if hermes_tier_sandbox else '; it has no shell and no file tools' }}.
 
 security:
   allow_lazy_installs: false
@@ -10,7 +10,7 @@ telemetry:
     enabled: false
     send: false
 
-# Search and page reading go through one pinned free keyless vendor that fetches the pages itself, so the worker never
+# Search and page reading go through one pinned free keyless vendor that fetches the pages itself, so the tier never
 # connects to an arbitrary host and a URL pointing at a private range cannot be reached from here.
 web:
   backend: keenable
@@ -22,31 +22,18 @@ web:
 gateway:
   systemd_watchdog_seconds: 120
 
-# Terminal, files, skills and planning act inside the container. No cron, no delegation, no code-execution on the host.
 platform_toolsets:
   telegram:
-    - web
-    - clarify
-    - memory
-    - session_search
-    - todo
-    - terminal
-    - file
-    - skills
+{% for toolset in hermes_tier_def.toolsets %}
+    - {{ toolset }}
+{% endfor %}
 
 agent:
   disabled_toolsets:
-    - code_execution
-    - browser
-    - delegation
-    - computer_use
-    - image_gen
-    - video_gen
-    - tts
-    - kanban
-    - connections
-    - catalog
-    - cronjob
+{% for toolset in hermes_tier_def.disabled_toolsets %}
+    - {{ toolset }}
+{% endfor %}
+{% if hermes_tier_sandbox %}
 
 # Every command runs in a rootless container with the stock crun runtime (docs/ARCHITECTURE.md, Sandbox). Hermes already
 # drops all capabilities but five, sets no-new-privileges, mounts tmpfs and applies cpu, memory and pids limits.
@@ -54,15 +41,16 @@ agent:
 terminal:
   backend: docker
   # The image is pinned by content: its ID is the sha256 of its config, which covers every layer (bin/hermes/pins.json).
-  # Hermes pulls an image only when it is absent locally, and the worker has no registry egress, so it never pulls.
-  docker_image: "{{ hermes_worker_image_id }}"
+  # Hermes pulls an image only when it is absent locally, and the tier has no registry egress, so it never pulls.
+  docker_image: "{{ hermes_tier_image_id }}"
   docker_network: false
   container_cpu: 1
   container_memory: 1024
   container_persistent: true
-  # Files the worker produces for the owner (MEDIA delivery): the only host path the container sees.
+  # Files the tier produces for the owner (MEDIA delivery): the only host path the container sees.
   docker_volumes:
-    - /home/hermesworker/.hermes/cache/documents:/output
+    - {{ hermes_tier_hermes_home }}/cache/documents:/output
+{% endif %}
 
 approvals:
   mode: manual
@@ -72,8 +60,8 @@ approvals:
   unattended_mode: deny
 
 model:
-  provider: claude-subscription-directsdk-experimental
-  default: claude-sonnet-5-5
+  provider: {{ hermes_pins.model.provider }}
+  default: {{ hermes_pins.model.default_model }}
 
 auth:
   adopt_external_logins: false
@@ -84,14 +72,14 @@ updates:
 plugins:
   auto_apply: false
   entries:
-    claude-subscription-directsdk-experimental:
+    {{ hermes_pins.model.provider }}:
       settings:
-        claude_config_dir: /home/hermesworker/.claude
+        claude_config_dir: {{ hermes_tier_claude_config_dir }}
         claude_code_telemetry: false
 
 providers:
-  claude-subscription-directsdk-experimental:
-    stale_timeout_seconds: 900
+  {{ hermes_pins.model.provider }}:
+    stale_timeout_seconds: {{ hermes_pins.model.stale_timeout_seconds }}
 
 skills:
   guard_agent_created: true

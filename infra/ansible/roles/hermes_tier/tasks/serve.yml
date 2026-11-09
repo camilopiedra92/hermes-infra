@@ -1,0 +1,72 @@
+---
+# The backend for Hermes Desktop. The login is a random password; only its scrypt hash reaches the service.
+- name: Create the directory of the Desktop login of the tier backend
+  ansible.builtin.file:
+    path: "{{ hermes_tier_serve_dir }}"
+    state: directory
+    owner: root
+    group: "{{ hermes_tier_user }}"
+    mode: "0750"
+
+- name: Install the credential generator
+  ansible.builtin.copy:
+    src: hermes-dashboard-credentials
+    dest: /usr/local/sbin/hermes-dashboard-credentials
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Create the Desktop login once (random password, only its hash goes to the service)
+  ansible.builtin.command:
+    argv:
+      - /usr/local/sbin/hermes-dashboard-credentials
+      - "{{ hermes_tier_serve_dir }}"
+      - "{{ hermes_tier_user }}"
+      - "{{ hermes_tier_serve_user }}"
+    creates: "{{ hermes_tier_serve_dir }}/serve.env"
+  no_log: true
+
+- name: Read the tailnet name of this host (never stored in git)
+  ansible.builtin.command: tailscale status --self --json
+  register: hermes_tier_tailscale_self
+  changed_when: false
+  check_mode: false
+
+- name: Install the backend unit
+  ansible.builtin.template:
+    src: hermes-tier-serve.service.j2
+    dest: "/etc/systemd/user/{{ hermes_tier_serve_unit }}"
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    hermes_tier_serve_host: "{{ (hermes_tier_tailscale_self.stdout | from_json).Self.DNSName.rstrip('.') }}"
+    hermes_tier_serve_url: "https://{{ hermes_tier_serve_host }}:{{ hermes_tier_serve_https_port }}"
+  register: hermes_tier_serve_installed
+
+- name: Publish the backend inside the tailnet over HTTPS (Tailscale Serve, no public exposure)
+  ansible.builtin.command:
+    argv:
+      - tailscale
+      - serve
+      - --bg
+      - --yes
+      - "--https={{ hermes_tier_serve_https_port }}"
+      - "http://127.0.0.1:{{ hermes_tier_serve_port }}"
+  changed_when: false
+
+- name: Enable the tier backend at boot and keep it running
+  ansible.builtin.systemd_service:
+    name: "{{ hermes_tier_serve_unit }}"
+    scope: user
+    enabled: true
+    daemon_reload: true
+    state: "{{ 'restarted' if hermes_tier_serve_installed is changed else 'started' }}"
+  become: true
+  become_user: "{{ hermes_tier_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ hermes_tier_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ hermes_tier_uid }}/bus"
+  vars:
+    ansible_remote_tmp: "/tmp/.ansible-{{ hermes_tier_user }}"
+  when: not ansible_check_mode

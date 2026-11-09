@@ -1,0 +1,6 @@
+# {{ ansible_managed }}
+# Everything the tier runs, the gateway and its containers together, stays inside this ceiling so it can never starve
+# the admin gateway or the host. It never swaps.
+[Slice]
+MemoryMax={{ hermes_tier_def.slice_memory_max }}
+MemorySwapMax=0

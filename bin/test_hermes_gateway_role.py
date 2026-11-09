@@ -40,9 +40,9 @@ class StateVolumePinTests(unittest.TestCase):
         else:
             self.assertEqual(PINS["state"]["unit"], "home-hermes-.hermes.mount")
 
-    def test_the_state_volume_does_not_clash_with_the_worker_volumes(self) -> None:
-        worker = ROOT / "infra" / "ansible" / "roles" / "hermes_worker" / "tasks" / "main.yml"
-        text = worker.read_text(encoding="utf-8")
+    def test_the_state_volume_does_not_clash_with_the_tier_volumes(self) -> None:
+        tier = ROOT / "infra" / "ansible" / "roles" / "hermes_tier" / "defaults" / "main.yml"
+        text = tier.read_text(encoding="utf-8")
         for value in (PINS["state"]["image"], PINS["state"]["unit"]):
             self.assertNotIn(value, text)
         self.assertTrue(PINS["state"]["image"].startswith("/var/lib/hermes/"))

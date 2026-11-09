@@ -64,12 +64,47 @@
       "admin_counter": "hermes_admin",
       "loopback_ports": "32768-60999",
       "loopback_counter": "hermes_loopback"
-    },
+    }
+  },
+  "tiers": {
     "worker": {
       "user": "hermesworker",
       "proxy_port": 8889,
       "extra_domains": [
         "api.keenable.ai"
+      ],
+      "sandbox": true,
+      "subid_start": 296608,
+      "subid_count": 65536,
+      "state_bytes": 6442450944,
+      "state_inodes": 262144,
+      "containers_bytes": 4294967296,
+      "containers_inodes": 262144,
+      "slice_memory_max": "2G",
+      "serve_port": 9120,
+      "serve_https_port": 8443,
+      "toolsets": [
+        "web",
+        "clarify",
+        "memory",
+        "session_search",
+        "todo",
+        "terminal",
+        "file",
+        "skills"
+      ],
+      "disabled_toolsets": [
+        "code_execution",
+        "browser",
+        "delegation",
+        "computer_use",
+        "image_gen",
+        "video_gen",
+        "tts",
+        "kanban",
+        "connections",
+        "catalog",
+        "cronjob"
       ]
     }
   },
@@ -95,14 +130,6 @@
     },
     "reasoning_effort": "medium"
   },
-  "worker": {
-    "image": {
-      "repository": "docker.io/library/python",
-      "tag": "3.14-slim",
-      "digest": "sha256:ac25e5afbfdb4a94ff99cc24b0345719210133144481480bcba6085efa36a341",
-      "id": "sha256:d8f0d5177291a2af21536287c48e3d17fea2d6bff80436c9bd206dd505b29e52"
-    }
-  },
   "admin": {
     "user": "hermesadmin",
     "uid": 1002,
@@ -111,5 +138,13 @@
     "port": 22,
     "key": "/home/hermes/.ssh/hermes-admin",
     "comment": "hermes-bot-admin"
+  },
+  "sandbox": {
+    "image": {
+      "repository": "docker.io/library/python",
+      "tag": "3.14-slim",
+      "digest": "sha256:ac25e5afbfdb4a94ff99cc24b0345719210133144481480bcba6085efa36a341",
+      "id": "sha256:d8f0d5177291a2af21536287c48e3d17fea2d6bff80436c9bd206dd505b29e52"
+    }
   }
 }

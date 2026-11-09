@@ -1,0 +1,31 @@
+# {{ ansible_managed }}
+# The backend that Hermes Desktop attaches to for the tier bots. It runs as the tier, under the tier's managed policy
+# and egress rule, and listens on loopback only. Tailscale Serve publishes it to the tailnet over HTTPS (the tailnet policy
+# lets only the owner's devices reach the port); nothing is reachable from the internet. Root-owned, so the tier cannot edit it.
+# The proxy variables come from the root-owned user-environment generator, one proxy per account, like the gateway units.
+[Unit]
+Description=Hermes backend for Hermes Desktop, {{ hermes_tier_name }} tier (loopback only)
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor={{ hermes_tier_hermes_home }}
+
+[Service]
+Type=simple
+ExecStart={{ hermes_tier_home }}/.local/bin/hermes serve --host 127.0.0.1 --port {{ hermes_tier_serve_port }} --skip-build
+WorkingDirectory={{ hermes_tier_hermes_home }}
+Environment="HERMES_HOME={{ hermes_tier_hermes_home }}"
+Environment="HERMES_MANAGED_DIR={{ hermes_tier_managed_dir }}"
+Environment="HERMES_DASHBOARD_PUBLIC_URL={{ hermes_tier_serve_url }}"
+EnvironmentFile={{ hermes_tier_serve_dir }}/serve.env
+Environment="CLAUDE_SUBSCRIPTION_DIRECTSDK_COMMAND={{ hermes_tier_claude_binary }}"
+Environment="CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1"
+Environment="DISABLE_AUTOUPDATER=1"
+Restart=on-failure
+RestartSec=5
+MemoryHigh=640M
+MemoryMax=768M
+TasksMax=512
+LimitCORE=0
+
+[Install]
+WantedBy=default.target

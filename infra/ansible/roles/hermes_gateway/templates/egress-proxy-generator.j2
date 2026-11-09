@@ -1,11 +1,13 @@
 #!/bin/sh
 # {{ ansible_managed }}
-# Runs in the user manager of every account and points its units at that account's own proxy. The worker proxy allows the
-# names of the admin proxy plus the web search API the worker needs. Root-owned, so neither account can choose another
-# proxy. Units of the manager inherit the variables.
+# Runs in the user manager of every account and points its units at that account's own proxy. A tier proxy allows the
+# names of the admin proxy plus the names that tier needs. Root-owned, so no account can choose another proxy. Units of
+# the manager inherit the variables.
 case "$(id -un)" in
   {{ hermes_pins.egress.user.name }}) port={{ hermes_pins.egress.nft.proxy_port }} ;;
-  {{ hermes_pins.egress.worker.user }}) port={{ hermes_pins.egress.worker.proxy_port }} ;;
+{% for tier in hermes_pins.tiers.values() %}
+  {{ tier.user }}) port={{ tier.proxy_port }} ;;
+{% endfor %}
   *) exit 0 ;;
 esac
 echo "HTTPS_PROXY=http://{{ hermes_pins.egress.nft.proxy_address }}:$port"

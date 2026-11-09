@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 ENV_FILE = Path(os.environ.get("HERMES_BACKUP_ENV", "/etc/hermes-backup/restic.env"))
-STATES = [Path(p) for p in os.environ.get("HERMES_BACKUP_STATES", "/home/hermes/.hermes:/home/hermesworker/.hermes").split(":")]
+STATES = [Path(p) for p in os.environ["HERMES_BACKUP_STATES"].split(":")]
 WORK = Path(os.environ.get("HERMES_BACKUP_WORK", "/var/lib/hermes-backup"))
 STAGE = WORK / "stage"
 STATUS = WORK / "status.json"

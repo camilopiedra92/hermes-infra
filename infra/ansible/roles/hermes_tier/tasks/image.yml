@@ -1,0 +1,39 @@
+---
+# The tier has no registry egress. The admin pulls the image by its registry digest, then the stream of the save
+# goes into the load of the tier. The load checks the config hash, so the tier holds exactly the pinned image ID.
+- name: Read whether the tier already has the image
+  ansible.builtin.command:
+    argv: "{{ hermes_tier_podman_as_user + ['image', 'exists', hermes_tier_image_id] }}"
+  register: hermes_tier_image_present
+  changed_when: false
+  failed_when: hermes_tier_image_present.rc not in [0, 1]
+  check_mode: false
+
+- name: Pull the image by digest as the admin
+  ansible.builtin.command:
+    argv: [podman, pull, --quiet, "{{ hermes_tier_image_pull }}"]
+  become: true
+  become_user: "{{ hermes_pins.admin.user }}"
+  vars:
+    ansible_remote_tmp: "/tmp/.ansible-{{ hermes_pins.admin.user }}"
+  environment:
+    HOME: "{{ hermes_pins.admin.home }}"
+  when: hermes_tier_image_present.rc == 1
+  changed_when: true
+
+- name: Stream the image from the admin into the tier
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      sudo -u {{ hermes_pins.admin.user }} env HOME={{ hermes_pins.admin.home }}
+      podman save --format docker-archive {{ hermes_tier_image_pull | quote }}
+      | {{ hermes_tier_podman_as_user | map('quote') | join(' ') }} load
+    executable: /bin/bash
+  when: hermes_tier_image_present.rc == 1
+  changed_when: true
+
+- name: Require the pinned image in the tier
+  ansible.builtin.command:
+    argv: "{{ hermes_tier_podman_as_user + ['image', 'exists', hermes_tier_image_id] }}"
+  changed_when: false
+  when: not ansible_check_mode

@@ -36,7 +36,8 @@ class BriefingTests(unittest.TestCase):
         self.assertIn(f"Hermes Agent {PINS['tag']}", BRIEFING)
         self.assertIn(f"Claude Code CLI ({PINS['model']['cli']['version']})", BRIEFING)
         self.assertIn(f"`claude-subscription-directsdk` {PINS['model']['plugin']['version']}", BRIEFING)
-        self.assertIn(f"admin {PINS['egress']['nft']['proxy_port']}, worker {PINS['egress']['worker']['proxy_port']}", BRIEFING)
+        ports = [f"admin {PINS['egress']['nft']['proxy_port']}"] + [f"{name} {tier['proxy_port']}" for name, tier in PINS["tiers"].items()]
+        self.assertIn(", ".join(ports), BRIEFING)
         for name in PINS["egress"]["domains"]:
             self.assertIn(name, BRIEFING)
 
