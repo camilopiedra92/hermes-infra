@@ -340,3 +340,7 @@
     group: "{{ hermes_worker_user }}"
     mode: "0600"
     force: false
+
+- name: Install the backend that Hermes Desktop attaches to for the worker bots
+  ansible.builtin.import_tasks: serve.yml
+  tags: [serve, never]

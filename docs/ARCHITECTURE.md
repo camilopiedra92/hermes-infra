@@ -27,7 +27,7 @@ the powerful credentials, and the agent that holds them never reads untrusted co
 | Tier | Who | Inputs | Capability |
 | --- | --- | --- | --- |
 | 0 | Admin agent (the Hermes gateway, owner-only Telegram) | owner messages, trusted tools | root through audited sudo, cloud tokens, approvals manual |
-| 1 | Worker agents (separate Hermes profiles) | web, public repos, any text | rootless container only; no host or cloud credential; scoped GitHub token for scratch repositories |
+| 1 | Worker agents (own account and Hermes instance) | web, public repos, any text | rootless container only; no host or cloud credential; scoped GitHub token for scratch repositories |
 | - | Break-glass | owner | Hetzner console, Tailscale from the owner's phone |
 
 Worker output (pull requests, files) is untrusted data for tier 0. A worker never merges, never applies.

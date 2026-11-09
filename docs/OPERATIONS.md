@@ -91,15 +91,20 @@ Secrets are never in git, never printed, and files holding them are mode 0600.
 
 ## Hermes Desktop
 
-Desktop attaches to `hermes-serve.service`, a user unit of the admin account that listens on `127.0.0.1:9119` only
-(`--tags serve`). Tailscale Serve publishes it inside the tailnet over HTTPS at `https://<host>.<tailnet>.ts.net`
-(Tailscale-issued certificate, `httpsEnabled` on the tailnet). Only the owner's devices reach tcp/443 (tailnet policy and
-nftables); nothing is reachable from the internet. The dashboard token is the second factor.
+Desktop registers one gateway per trust tier and lists their bots side by side (Settings, Gateways). Each gateway is a user unit
+that listens on loopback only (`--tags serve`), published inside the tailnet over HTTPS by Tailscale Serve with a
+Tailscale-issued certificate (`httpsEnabled` on the tailnet). Only the owner's devices reach the ports (tailnet policy and
+nftables); nothing is reachable from the internet.
 
-In Desktop: Settings, Gateways, Add, Remote gateway, the URL above, then Sign in with user `camilo` and the generated password.
-Read the password once: `ssh hermesops@hermes sudo cat /etc/hermes-dashboard/password`. Only its scrypt hash and a signing
-secret are in `/etc/hermes-dashboard/serve.env` (readable by the service group). Rotate by deleting `serve.env` and `password`,
-applying `--tags serve` and restarting `hermes-serve`. Opening the URL in a browser works too, through the same sign-in page.
+| Gateway | Unit (account) | Loopback | URL | Login files |
+| --- | --- | --- | --- | --- |
+| Admin bot | `hermes-serve` (`hermes`) | 9119 | `https://<host>.<tailnet>.ts.net` | `/etc/hermes-dashboard` |
+| Worker bots | `hermes-worker-serve` (`hermesworker`) | 9120 | `https://<host>.<tailnet>.ts.net:8443` | `/etc/hermes-worker-dashboard` |
+
+In Desktop: Settings, Gateways, Add connection, Remote gateway, the URL, then sign in with user `camilo` and the generated
+password. Read a password once: `ssh hermesops@hermes sudo cat <login files>/password`. Only its scrypt hash and a signing secret
+are in `<login files>/serve.env` (readable by the service group). Rotate by deleting `serve.env` and `password`, applying
+`--tags serve` and restarting the unit. Opening the URL in a browser works too, through the same sign-in page.
 
 ## Worker (tier 1)
 

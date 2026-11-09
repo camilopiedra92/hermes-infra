@@ -27,3 +27,12 @@ hermes_worker_plugin_dir: "{{ hermes_worker_hermes_home }}/plugins/{{ 'claude-su
 hermes_worker_gateway_unit: hermes-gateway.service
 hermes_worker_uid: "{{ ansible_facts['getent_passwd'][hermes_worker_user][1] }}"
 hermes_worker_slice_memory_max: 2G
+
+# The loopback backend that Hermes Desktop attaches to for the worker bots (published by Tailscale Serve on its own
+# HTTPS port, so it is a separate gateway with its own sign-in) and its login.
+hermes_worker_serve_port: 9120
+hermes_worker_serve_https_port: 8443
+hermes_worker_serve_dir: /etc/hermes-worker-dashboard
+hermes_worker_serve_user: camilo
+hermes_worker_serve_unit: hermes-worker-serve.service
+hermes_worker_claude_binary: "{{ hermes_pins.model.cli.root }}/{{ hermes_pins.model.cli.version }}/package/claude"

@@ -1,0 +1,32 @@
+# {{ ansible_managed }}
+# The backend that Hermes Desktop attaches to for the worker bots. It runs as the worker, under the worker's managed policy
+# and egress rule, and listens on loopback only. Tailscale Serve publishes it to the tailnet over HTTPS (the tailnet policy
+# lets only the owner's devices reach the port); nothing is reachable from the internet. Root-owned, so the worker cannot edit it.
+[Unit]
+Description=Hermes backend for Hermes Desktop, worker tier (loopback only)
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor={{ hermes_worker_hermes_home }}
+
+[Service]
+Type=simple
+ExecStart={{ hermes_worker_home }}/.local/bin/hermes serve --host 127.0.0.1 --port {{ hermes_worker_serve_port }} --skip-build
+WorkingDirectory={{ hermes_worker_hermes_home }}
+Environment="HERMES_HOME={{ hermes_worker_hermes_home }}"
+Environment="HERMES_MANAGED_DIR={{ hermes_worker_managed_dir }}"
+Environment="HERMES_DASHBOARD_PUBLIC_URL={{ hermes_worker_serve_url }}"
+EnvironmentFile={{ hermes_worker_serve_dir }}/serve.env
+Environment="HTTPS_PROXY=http://{{ hermes_pins.egress.nft.proxy_address }}:{{ hermes_pins.egress.nft.proxy_port }}"
+Environment="NO_PROXY=localhost,127.0.0.1,::1"
+Environment="CLAUDE_SUBSCRIPTION_DIRECTSDK_COMMAND={{ hermes_worker_claude_binary }}"
+Environment="CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1"
+Environment="DISABLE_AUTOUPDATER=1"
+Restart=on-failure
+RestartSec=5
+MemoryHigh=640M
+MemoryMax=768M
+TasksMax=512
+LimitCORE=0
+
+[Install]
+WantedBy=default.target
