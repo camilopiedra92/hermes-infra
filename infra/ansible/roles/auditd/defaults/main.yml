@@ -1,0 +1,25 @@
+---
+# Watched authorized_keys path. The account already exists (role access).
+auditd_ops_user: hermesops
+
+# Root filesystem is 75G. max_log_file (MiB) times num_logs is the audit
+# file ceiling (32 * 8 = 256 MiB). space_left rotates before that matters.
+# admin_space_left suspends audit writes once free space is under 2 GiB.
+# Actions are ROTATE and SUSPEND. HALT and SINGLE are not used.
+auditd_max_log_file_mb: 32
+auditd_num_logs: 8
+auditd_max_log_file_action: ROTATE
+auditd_space_left_mb: 3072
+auditd_space_left_action: ROTATE
+auditd_admin_space_left_mb: 2048
+auditd_admin_space_left_action: SUSPEND
+auditd_disk_full_action: SUSPEND
+auditd_disk_error_action: SUSPEND
+
+# Journald honours both: it will not grow past SystemMaxUse, and it will
+# not eat into the last SystemKeepFree of the filesystem.
+auditd_journal_system_max_use: 500M
+auditd_journal_system_keep_free: 2G
+auditd_journal_system_max_file_size: 64M
+auditd_journal_runtime_max_use: 128M
+auditd_journal_max_retention_sec: 30day

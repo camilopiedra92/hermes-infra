@@ -1,0 +1,28 @@
+# {{ ansible_managed }}
+# Privileged-file watches and execve for login uids.
+# Packaged /etc/audit/rules.d/audit.rules already sets -D, -b 8192 and
+# failure mode syslog, and it sorts first. Do not repeat -b or -D here,
+# and do not add -e 2: a locked ruleset cannot be reconciled next run.
+# auid>=1000 is the login uid. Daemons started at boot have auid unset
+# (a future rootless dockerd included) and are not covered here.
+# The host is amd64; b64 covers execve.
+
+-w /etc/passwd -p wa -k hermes_identity
+-w /etc/shadow -p wa -k hermes_identity
+-w /etc/group -p wa -k hermes_identity
+
+-w /etc/sudoers -p wa -k hermes_sudoers
+-w /etc/sudoers.d -p wa -k hermes_sudoers
+
+-w /etc/ssh/sshd_config -p wa -k hermes_sshd
+-w /etc/ssh/sshd_config.d -p wa -k hermes_sshd
+
+-w /home/{{ auditd_ops_user }}/.ssh/authorized_keys -p wa -k hermes_authkeys
+{% if (auditd_root_authorized_keys.stat | default({})).exists | default(false) %}
+-w /root/.ssh/authorized_keys -p wa -k hermes_authkeys
+{% endif %}
+
+-w /etc/nftables.conf -p wa -k hermes_nftables
+-w /etc/nftables.d -p wa -k hermes_nftables
+
+-a always,exit -F arch=b64 -S execve -F auid>=1000 -F auid!=unset -k hermes_execve

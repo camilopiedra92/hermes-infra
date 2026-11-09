@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  author: cto
+  description: auditd rules and auditd/journald disk caps
+  license: proprietary
+  min_ansible_version: "2.17"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

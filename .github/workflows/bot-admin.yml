@@ -1,0 +1,47 @@
+name: bot-admin
+
+# Applies the bot_admin role to a runner with a real sshd and sudo, and proves the channel of:
+# the service user logs in over 127.0.0.1 with its own key and becomes root, nothing else gets in,
+# and the switch closes and opens the channel.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/bot-admin.yml"
+      - ".github/scripts/bot-admin-check.sh"
+      - "infra/ansible/roles/bot_admin/**"
+      - "infra/ansible/site.yml"
+      - "bin/hermes/pins.json"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  channel:
+    name: channel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Install Ansible, with the hashes the host pipeline uses
+        run: python -m pip install --require-hashes --no-deps -r .github/requirements-ci.txt
+
+      - name: Prerequisites
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends openssh-server sudo
+
+      - name: Apply the role and prove the channel
+        run: sudo env PATH="$PATH" .github/scripts/bot-admin-check.sh

@@ -1,0 +1,342 @@
+---
+- name: Load the Hermes pins
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../../bin/hermes/pins.json"
+    name: hermes_pins
+  tags: [always]
+
+- name: Create the worker account (no password, no login shell)
+  ansible.builtin.user:
+    name: "{{ hermes_worker_user }}"
+    home: "{{ hermes_worker_home }}"
+    shell: /usr/sbin/nologin
+    password: "!"
+    create_home: true
+    umask: "0077"
+
+- name: Keep the home of the worker private
+  ansible.builtin.file:
+    path: "{{ hermes_worker_home }}"
+    state: directory
+    owner: "{{ hermes_worker_user }}"
+    group: "{{ hermes_worker_user }}"
+    mode: "0700"
+
+- name: Give the worker subordinate ids for rootless containers
+  ansible.builtin.lineinfile:
+    path: "{{ item }}"
+    regexp: "^{{ hermes_worker_user }}:"
+    line: "{{ hermes_worker_user }}:{{ hermes_worker_subid_start }}:{{ hermes_worker_subid_count }}"
+  loop:
+    - /etc/subuid
+    - /etc/subgid
+
+- name: Let the worker's user manager run without a login session
+  ansible.builtin.command:
+    argv: [loginctl, enable-linger, "{{ hermes_worker_user }}"]
+    creates: "/var/lib/systemd/linger/{{ hermes_worker_user }}"
+
+- name: Create the parents of the container storage mount point (the capped volume role creates only the leaf)
+  ansible.builtin.file:
+    path: "{{ hermes_worker_home }}/{{ item }}"
+    state: directory
+    owner: "{{ hermes_worker_user }}"
+    group: "{{ hermes_worker_user }}"
+    mode: "0700"
+  loop:
+    - .local
+    - .local/share
+
+- name: Create the capped filesystems of the worker
+  ansible.builtin.include_role:
+    name: capped_volume
+  vars:
+    capped_volume_list:
+      - label: Worker state
+        fs_label: worker-state
+        image: /var/lib/hermes/worker-state.img
+        mount: "{{ hermes_worker_hermes_home }}"
+        bytes: "{{ hermes_worker_state_bytes }}"
+        inodes: "{{ hermes_worker_state_inodes }}"
+        unit: home-hermesworker-.hermes.mount
+        mode: "0700"
+        owner: "{{ hermes_worker_user }}"
+      - label: Worker container storage
+        fs_label: worker-containers
+        image: /var/lib/hermes/worker-containers.img
+        mount: "{{ hermes_worker_home }}/.local/share/containers"
+        bytes: "{{ hermes_worker_containers_bytes }}"
+        inodes: "{{ hermes_worker_containers_inodes }}"
+        unit: home-hermesworker-.local-share-containers.mount
+        mode: "0700"
+        owner: "{{ hermes_worker_user }}"
+
+- name: Read whether the worker code is installed
+  ansible.builtin.stat:
+    path: "{{ hermes_worker_code_dir }}/.git"
+  register: hermes_worker_code_stat
+  changed_when: false
+  check_mode: false
+
+- name: Give the worker the parent of its code directory during the install
+  ansible.builtin.file:
+    path: "{{ hermes_worker_code_parent }}"
+    state: directory
+    owner: "{{ hermes_worker_user }}"
+    group: "{{ hermes_worker_user }}"
+    mode: "0755"
+  when: not hermes_worker_code_stat.stat.exists
+
+- name: Run the pinned installer as the worker, from a clean environment
+  ansible.builtin.command:
+    argv: >-
+      {{ hermes_worker_as_user
+         + ['USER=' ~ hermes_worker_user, 'LOGNAME=' ~ hermes_worker_user, 'LANG=C.UTF-8',
+            'HERMES_REPO_URL=' ~ hermes_pins.repo,
+            'bash', '/usr/local/share/hermes/install.sh',
+            '--commit', hermes_pins.commit, '--dir', hermes_worker_code_dir,
+            '--hermes-home', hermes_worker_hermes_home]
+         + hermes_pins.install.flags }}
+    chdir: /
+  when: not hermes_worker_code_stat.stat.exists
+  changed_when: true
+
+- name: Provision the messaging library
+  ansible.builtin.command:
+    argv: "{{ hermes_worker_as_user + [hermes_worker_home ~ '/.local/bin/hermes', 'pm', 'install', '--extra', item] }}"
+    chdir: /
+  loop: "{{ hermes_pins.install.extras }}"
+  when: not hermes_worker_code_stat.stat.exists
+  changed_when: true
+
+- name: Make the code owned by root, readable by everyone and writable by no one else
+  ansible.builtin.file:
+    path: "{{ hermes_worker_code_dir }}"
+    state: directory
+    recurse: true
+    owner: root
+    group: root
+    mode: "u+rwX,go+rX,go-w"
+  when: not hermes_worker_code_stat.stat.exists and not ansible_check_mode
+
+- name: Take the parent of the code directory back
+  ansible.builtin.file:
+    path: "{{ hermes_worker_code_parent }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: not ansible_check_mode
+
+- name: Read the account of the worker
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ hermes_worker_user }}"
+  changed_when: false
+  check_mode: false
+
+- name: Pin the policy the worker cannot change
+  ansible.builtin.file:
+    path: "{{ hermes_worker_managed_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the managed policy of the worker
+  ansible.builtin.copy:
+    src: managed-config.yaml
+    dest: "{{ hermes_worker_managed_dir }}/config.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+  register: hermes_worker_policy
+
+- name: Read the Telegram users the owner allowed on the admin bot (the same single owner)
+  ansible.builtin.slurp:
+    src: /etc/hermes/.env
+  register: hermes_worker_admin_env
+  changed_when: false
+  check_mode: false
+
+- name: Install the managed environment of the worker (nothing secret)
+  ansible.builtin.copy:
+    content: |
+      # Ansible managed. Not secret.
+      HERMES_DOCKER_BINARY=/usr/bin/podman
+      HERMES_TELEGRAM_DISABLE_FALLBACK_IPS=true
+      {{ (hermes_worker_admin_env.content | b64decode).splitlines()
+         | select('match', '^TELEGRAM_ALLOWED_USERS=') | first }}
+    dest: "{{ hermes_worker_managed_dir }}/.env"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create the Claude login directory of the worker
+  ansible.builtin.file:
+    path: "{{ hermes_worker_claude_config_dir }}"
+    state: directory
+    owner: "{{ hermes_worker_user }}"
+    group: "{{ hermes_worker_user }}"
+    mode: "0700"
+
+- name: Create the output directory the container shares with the worker gateway
+  ansible.builtin.file:
+    path: "{{ hermes_worker_hermes_home }}/cache/documents"
+    state: directory
+    owner: "{{ hermes_worker_user }}"
+    group: "{{ hermes_worker_user }}"
+    mode: "0700"
+
+- name: Read whether the model plugin is installed
+  ansible.builtin.command:
+    argv: ["/usr/local/share/hermes/plugin-manifest.sh", "{{ hermes_worker_plugin_dir }}"]
+  register: hermes_worker_plugin_hash
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install the model plugin at the pinned commit
+  ansible.builtin.command:
+    argv: >-
+      {{ hermes_worker_as_user
+         + ['HERMES_MANAGED_DIR=' ~ hermes_worker_managed_dir,
+            hermes_worker_home ~ '/.local/bin/hermes', 'plugins', 'install',
+            hermes_pins.model.plugin.identifier, '--ref', hermes_pins.model.plugin.ref, '--yes-deps', '--no-enable']
+         + (['--force'] if (hermes_worker_plugin_hash.stdout | default('') | trim) != '' else []) }}
+    chdir: /
+  when: (hermes_worker_plugin_hash.stdout | default('') | trim) != hermes_pins.model.plugin.manifest_sha256
+  changed_when: true
+
+- name: Read the hash of the plugin files after the install
+  ansible.builtin.command:
+    argv: ["/usr/local/share/hermes/plugin-manifest.sh", "{{ hermes_worker_plugin_dir }}"]
+  register: hermes_worker_plugin_hash_after
+  changed_when: false
+  check_mode: false
+  failed_when:
+    - hermes_worker_plugin_hash_after.stdout | trim != hermes_pins.model.plugin.manifest_sha256
+    - not ansible_check_mode
+
+- name: Create the directory of the environment generators of user managers
+  ansible.builtin.file:
+    path: /etc/systemd/user-environment-generators
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Pin the managed directory of the worker in the environment of its user manager
+  ansible.builtin.template:
+    src: managed-dir-generator.j2
+    dest: /etc/systemd/user-environment-generators/60-hermes-managed-dir
+    owner: root
+    group: root
+    mode: "0755"
+    validate: sh -n %s
+  register: hermes_worker_generator
+
+- name: Create the drop-in directory of the user manager of the worker
+  ansible.builtin.file:
+    path: "/etc/systemd/system/user@{{ hermes_worker_uid }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Delegate the cgroup controllers that rootless containers need to every user manager
+  ansible.builtin.template:
+    src: delegate.conf.j2
+    dest: /etc/systemd/system/user@.service.d/50-hermes-delegate.conf
+    owner: root
+    group: root
+    mode: "0644"
+  register: hermes_worker_delegate
+
+- name: Create the slice drop-in directory of the worker
+  ansible.builtin.file:
+    path: "/etc/systemd/system/user-{{ hermes_worker_uid }}.slice.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Cap the memory of everything the worker runs
+  ansible.builtin.template:
+    src: worker-slice.conf.j2
+    dest: "/etc/systemd/system/user-{{ hermes_worker_uid }}.slice.d/50-hermes-worker.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  register: hermes_worker_slice
+
+- name: Order the user manager of the worker after the egress ruleset
+  ansible.builtin.template:
+    src: worker-user-manager.conf.j2
+    dest: "/etc/systemd/system/user@{{ hermes_worker_uid }}.service.d/60-hermes-worker.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  register: hermes_worker_manager_dropin
+
+- name: Let Hermes write the gateway unit of the worker, neither started nor enabled
+  ansible.builtin.command:
+    argv: >-
+      {{ hermes_worker_as_user
+         + ['HERMES_MANAGED_DIR=' ~ hermes_worker_managed_dir,
+            'XDG_RUNTIME_DIR=/run/user/' ~ hermes_worker_uid,
+            'DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/' ~ hermes_worker_uid ~ '/bus',
+            hermes_worker_home ~ '/.local/bin/hermes', 'gateway', 'install', '--no-start-now', '--no-start-on-login'] }}
+    creates: "{{ hermes_worker_home }}/.config/systemd/user/{{ hermes_worker_gateway_unit }}"
+  when: not ansible_check_mode
+
+- name: Hold the worker behind the local proxy (fail closed)
+  ansible.builtin.template:
+    src: worker.nft.j2
+    dest: /etc/nftables.d/30-hermes-worker.nft
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/nft -c -f %s
+  notify: Load the worker egress rule
+
+- name: Apply the egress rule before the gateway can start
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the worker gateway at boot and keep it running
+  ansible.builtin.systemd_service:
+    name: "{{ hermes_worker_gateway_unit }}"
+    scope: user
+    enabled: true
+    daemon_reload: true
+    state: >-
+      {{ 'restarted' if (hermes_worker_generator is changed or hermes_worker_manager_dropin is changed
+      or hermes_worker_policy is changed) else 'started' }}
+  become: true
+  become_user: "{{ hermes_worker_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ hermes_worker_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ hermes_worker_uid }}/bus"
+  vars:
+    ansible_remote_tmp: "/tmp/.ansible-{{ hermes_worker_user }}"
+  when: not ansible_check_mode
+
+# One identity for the owner across bots: the worker starts from the owner's profile as the admin agent knows it.
+# Seeded once and never overwritten, because the worker keeps learning on its own.
+- name: Create the memory directory of the worker
+  ansible.builtin.file:
+    path: "{{ hermes_worker_hermes_home }}/memories"
+    state: directory
+    owner: "{{ hermes_worker_user }}"
+    group: "{{ hermes_worker_user }}"
+    mode: "0700"
+
+- name: Seed the owner profile of the worker from the admin agent (only when absent)
+  ansible.builtin.copy:
+    src: /home/hermes/.hermes/memories/USER.md
+    dest: "{{ hermes_worker_hermes_home }}/memories/USER.md"
+    remote_src: true
+    owner: "{{ hermes_worker_user }}"
+    group: "{{ hermes_worker_user }}"
+    mode: "0600"
+    force: false

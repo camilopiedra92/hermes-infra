@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Fixed-size filesystem for sudo I/O logs
+DefaultDependencies=yes
+RequiresMountsFor={{ access_iolog_image }}
+Before=local-fs.target
+
+[Mount]
+What={{ access_iolog_image }}
+Where={{ access_iolog_root }}
+Type=ext4
+Options=loop,nodev,nosuid,noexec,nofail
+
+[Install]
+WantedBy=local-fs.target

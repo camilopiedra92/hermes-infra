@@ -1,0 +1,33 @@
+# Secrets: only sops-encrypted files may be committed
+*.dec.yaml
+*.dec.yml
+.env
+.env.*
+*.key
+*.pem
+*.agekey
+keys.txt
+
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ansible
+*.retry
+.ansible/
+
+# Python
+__pycache__/
+*.pyc
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Python bytecode
+__pycache__/
+*.pyc

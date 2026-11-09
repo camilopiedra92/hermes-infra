@@ -1,0 +1,27 @@
+---
+- name: Configure the Hermes host
+  hosts: hermes
+  become: true
+  roles:
+    - role: nftables
+      tags: [nftables]
+    - role: tailscale_node
+      tags: [tailscale]
+    - role: access
+      tags: [access]
+    - role: auditd
+      tags: [auditd]
+    - role: service_user
+      tags: [service_user]
+    - role: bot_admin
+      tags: [bot_admin]
+    - role: hermes_gateway
+      tags: [gateway]
+    - role: backup
+      tags: [backup]
+    - role: hardening
+      tags: [hardening]
+    - role: health
+      tags: [health]
+    - role: hermes_worker
+      tags: [worker]

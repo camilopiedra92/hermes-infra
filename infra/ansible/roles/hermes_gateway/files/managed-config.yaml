@@ -1,0 +1,147 @@
+# Hermes managed scope. Owned by root in /etc/hermes. For the keys below the user
+# `hermes` cannot override these values, in config.yaml, in .env or in the environment, and
+# `hermes config set` refuses to change them. Nothing here is a secret.
+
+security:
+  # Nothing is installed on demand. What runs was provisioned in the install window and
+  # checked by `hermes pm doctor`.
+  allow_lazy_installs: false
+
+telemetry:
+  shared_metrics:
+    enabled: false
+    send: false
+
+web:
+  # Without a credential Hermes rotates across four vendors' free tiers and retries a failed
+  # call on them. Both are silent egress to vendors the allowlist does not name.
+  keyless_fallback: false
+  keyless_rescue: false
+
+gateway:
+  # The unit becomes Type=notify and systemd restarts a gateway whose event loop stalls.
+  systemd_watchdog_seconds: 120
+
+# (owner decision, 2026-11-09): the bot administers and develops this host. Telegram gets a terminal,
+# files and scheduled jobs, and nothing else that acts by itself. `hermes-telegram` is the same as the CLI toolset,
+# terminal included, so this list is an allowlist. Web, browser, code execution and delegation stay off.
+#
+platform_toolsets:
+  telegram:
+    - clarify
+    - memory
+    - session_search
+    - todo
+    - terminal
+    - file
+    - cronjob
+    - skills
+
+# Commands run on the host as the administrator account, over SSH on loopback. The key is the
+# service user's own, the host key is pinned in `~/.ssh/known_hosts`, and `Host hermes-admin` in `~/.ssh/config`
+# (written by the bot_admin role) resolves to 127.0.0.1 and refuses a changed key. Not the `local` backend: the
+# gateway's own identity keeps no shell of its own.
+terminal:
+  backend: ssh
+  ssh_host: hermes-admin
+  ssh_user: hermesadmin
+  ssh_port: 22
+  ssh_key: /home/hermes/.ssh/hermes-admin
+  cwd: /home/hermesadmin
+  persistent_shell: true
+
+# Skills are how the bot learns (owner, 2026-11-09: it must improve by itself). An injected instruction would
+# outlive the
+# chat that carried it, so the scanner runs on every write. The approval gate is off while the only inputs are
+# the owner's
+# chat and trusted tools; turn it back on before any untrusted source (web, public issues) is enabled. The
+# state is backed
+# up daily, so a bad write is reversible.
+skills:
+  guard_agent_created: true
+  write_approval: false
+
+# Never `off`, never YOLO. A dangerous command asks the owner in the chat and is denied when nobody answers.
+# A cron job that hits one is denied. `deny` is a friction against the mistakes that cost the owner his access
+# it is a shell-command policy, not a boundary against a hostile bot. Secrets are protected by
+# file ownership and mode, zone separation and the sudo audit log, never by matching file names in commands:
+# a substring match blocks legitimate work (excluding a file from a backup) and stops nothing for a root-
+# capable account.
+approvals:
+  mode: manual
+  timeout: 300
+  cron_mode: deny
+  single_query_mode: deny
+  unattended_mode: deny
+  deny:
+    - 'nft flush*'
+    - 'nft delete table*'
+    - 'ufw *'
+    - 'iptables *'
+    - 'systemctl stop tailscaled*'
+    - 'systemctl disable tailscaled*'
+    - 'systemctl mask*tailscaled*'
+    - 'systemctl stop ssh*'
+    - 'systemctl disable ssh*'
+    - 'systemctl mask*ssh*'
+    - 'tailscale down*'
+    - 'tailscale logout*'
+    - 'tailscale set*--ssh=false*'
+    - 'userdel*hermesops*'
+    - 'usermod*hermesops*'
+    - 'passwd*hermesops*'
+    - 'chage*hermesops*'
+    - 'rm*/home/hermesops/.ssh*'
+    - 'hcloud server delete*'
+    - 'hcloud server rebuild*'
+    - 'git push*--force*'
+
+agent:
+  # The reasoning effort is deliberately NOT pinned here (owner, 2026-11-09).
+  # It is a preference, not a policy: the owner changes it from the chat with /reasoning.
+  # Hermes' own default is medium, and the install job checks that it is.
+  # A second belt, applied after the per-platform list: a toolset named here is always removed.
+  disabled_toolsets:
+    - code_execution
+    - browser
+    - web
+    - search
+    - delegation
+    - computer_use
+    - image_gen
+    - video_gen
+    - tts
+    - kanban
+    - connections
+    - catalog
+
+# The model path is the subscription plugin and nothing else. Hermes' own defaults are `provider: auto`,
+# an OpenRouter address, an adoption of external logins and a passive update check.
+model:
+  provider: claude-subscription-directsdk-experimental
+  # Written out, not the alias: the owner asked for Sonnet 5.5 (2026-11-09).
+  # The plugin's pinned catalog gives it a 1M context, which the owner chose to keep.
+  default: claude-sonnet-5-5
+
+auth:
+  # Hermes never reads or refreshes the Claude CLI credential file.
+  # The plugin drives the CLI, and the CLI keeps its own login.
+  adopt_external_logins: false
+
+updates:
+  check: false
+
+plugins:
+  # No plugin updates by themselves: a pin moves only after the eval suite.
+  auto_apply: false
+  entries:
+    claude-subscription-directsdk-experimental:
+      settings:
+        claude_config_dir: /home/hermes/.claude
+        claude_code_telemetry: false
+
+providers:
+  claude-subscription-directsdk-experimental:
+    # A hung call is cancelled. On 401, 429, 402, 529 or a missing CLI the turn fails
+    # and the service does not switch provider.
+    stale_timeout_seconds: 900

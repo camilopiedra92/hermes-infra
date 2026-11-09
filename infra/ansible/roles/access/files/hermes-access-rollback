@@ -1,0 +1,62 @@
+#!/bin/bash
+# Restore the previous sudoers drop-in, then remove the sudo I/O mount.
+#
+# Sudoers is restored first and checked with visudo. Later steps run only
+# after that succeeds, so a mount failure cannot leave the operator on the
+# new drop-in. The previous drop-in does not use the I/O filesystem.
+#
+# The image is kept. It is the sudo I/O record, at most 512 MiB, and it is
+# forced back to root:root mode 0600. Pass --remove-image to delete it.
+# A later apply reuses a kept image only when it is a regular ext4 file of
+# that size. A missing or invalid sudoers backup stops this script before
+# it unmounts anything.
+set -euo pipefail
+
+prefix=${HERMES_ROLLBACK_ROOT:-}
+remove_image=0
+if [[ ${1:-} == --remove-image ]]; then
+  remove_image=1
+elif [[ -n ${1:-} ]]; then
+  echo "hermes-access-rollback: unknown argument ${1}" >&2
+  exit 2
+fi
+
+backup="${prefix}/root/hermes-rollback/90-hermesops"
+sudoers="${prefix}/etc/sudoers.d/90-hermesops"
+image="${prefix}/var/lib/hermes/sudo-io.img"
+mount_point="${prefix}/var/log/sudo-io"
+unit_dir="${prefix}/etc/systemd/system"
+# The unit file name contains a literal backslash (\x2d), matching systemd-escape.
+mount_unit="${unit_dir}/var-log-sudo\\x2dio.mount"
+
+if [[ ! -f ${backup} ]]; then
+  echo "hermes-access-rollback: refusing to roll back: saved sudoers backup is missing (${backup})" >&2
+  exit 1
+fi
+if ! visudo -cf "${backup}"; then
+  echo "hermes-access-rollback: refusing to roll back: saved sudoers backup is invalid (${backup})" >&2
+  exit 1
+fi
+cp -a "${backup}" "${sudoers}"
+visudo -cf "${sudoers}"
+
+systemctl disable --now hermes-sudo-io-prune.timer || true
+rm -f "${unit_dir}/hermes-sudo-io-prune.service" "${unit_dir}/hermes-sudo-io-prune.timer"
+
+systemctl disable --now 'var-log-sudo\x2dio.mount' || true
+if findmnt -M "${mount_point}" >/dev/null 2>&1; then
+  umount "${mount_point}" || umount -l "${mount_point}" || true
+fi
+rm -f "${mount_unit}"
+systemctl daemon-reload || true
+
+if [[ -d ${mount_point} ]]; then
+  chattr -i "${mount_point}" || true
+fi
+
+if [[ ${remove_image} -eq 1 ]]; then
+  rm -f "${image}"
+elif [[ -e ${image} ]]; then
+  chown root:root "${image}"
+  chmod 0600 "${image}"
+fi

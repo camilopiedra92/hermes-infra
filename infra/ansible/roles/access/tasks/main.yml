@@ -1,0 +1,200 @@
+---
+# Reads below set check_mode false so --check sees real output, and
+# changed_when false so the read itself is not a change. Missing output
+# is an empty result, not a failed template.
+- name: Read the operations account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ access_ops_user }}"
+  changed_when: false
+  check_mode: false
+
+- name: Require the existing operations uid
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((ansible_facts['getent_passwd'] | default({}))[access_ops_user]
+        | default(['', ''], true))[1] | int == access_ops_uid | int
+    fail_msg: >-
+      {{ access_ops_user }} must already exist with uid {{ access_ops_uid }}.
+      This role does not create or rename the operations user.
+
+- name: Install filesystem tools for the sudo I/O volume
+  ansible.builtin.apt:
+    name: e2fsprogs
+    state: present
+
+- name: Install the sudo I/O rollback script
+  ansible.builtin.copy:
+    src: hermes-access-rollback
+    dest: /usr/local/sbin/hermes-access-rollback
+    owner: root
+    group: root
+    mode: "0700"
+
+# Image creation, the ext4 proof, and mkfs live in image.yml.
+# mkfs is not selected from blkid output.
+- name: Prepare the sudo I/O image
+  ansible.builtin.import_tasks: image.yml
+
+- name: Read the mount table before the sudo I/O mount
+  ansible.builtin.slurp:
+    src: /proc/mounts
+  register: access_proc_mounts_before
+  changed_when: false
+  check_mode: false
+
+- name: Record whether the sudo I/O filesystem is already mounted
+  ansible.builtin.set_fact:
+    access_iolog_mounted: >-
+      {{ (access_proc_mounts_before.content | default('') | length) > 0
+         and ((' ' ~ access_iolog_root ~ ' ') in
+              (access_proc_mounts_before.content | b64decode)) }}
+
+# Mode 0000 does not stop root. The immutable flag does: while this path
+# is unmounted, sudo cannot create session directories on the root
+# filesystem. mount(8) still mounts an image onto an immutable directory.
+- name: Create an immutable sudo I/O mount point
+  ansible.builtin.file:
+    path: "{{ access_iolog_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0000"
+    attributes: "+i"
+  when: not (access_iolog_mounted | bool)
+
+- name: Install the sudo I/O mount unit
+  ansible.builtin.template:
+    src: var-log-sudo-io.mount.j2
+    dest: "/etc/systemd/system/{{ access_iolog_mount_unit }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Stat the sudo I/O mount unit
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ access_iolog_mount_unit }}"
+  register: access_iolog_mount_unit_stat
+  changed_when: false
+  check_mode: false
+
+# The first --check does not write the unit, and systemd fails enable
+# when the unit is absent. A later --check must report no change.
+- name: Mount the sudo I/O filesystem
+  ansible.builtin.systemd_service:
+    name: "{{ access_iolog_mount_unit }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: (access_iolog_mount_unit_stat.stat | default({})).exists | default(false)
+
+- name: Read the mount table after the sudo I/O mount
+  ansible.builtin.slurp:
+    src: /proc/mounts
+  register: access_proc_mounts_after
+  changed_when: false
+  check_mode: false
+
+- name: Record whether the sudo I/O filesystem is mounted
+  ansible.builtin.set_fact:
+    access_iolog_mounted: >-
+      {{ (access_proc_mounts_after.content | default('') | length) > 0
+         and ((' ' ~ access_iolog_root ~ ' ') in
+              (access_proc_mounts_after.content | b64decode)) }}
+
+- name: Require the sudo I/O filesystem before changing sudoers
+  ansible.builtin.assert:
+    that:
+      - access_iolog_mounted | bool
+    fail_msg: >-
+      {{ access_iolog_root }} is not mounted. The sudoers drop-in is
+      unchanged so sudo is not pointed at an unmounted directory.
+  when: >-
+    not ansible_check_mode
+    or (access_iolog_mount_unit_stat.stat | default({})).exists | default(false)
+
+- name: Set the mounted sudo I/O filesystem mode
+  ansible.builtin.file:
+    path: "{{ access_iolog_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: access_iolog_mounted | bool
+
+- name: Create the operations user sudo I/O directory
+  ansible.builtin.file:
+    path: "{{ access_iolog_root }}/{{ access_ops_user }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: access_iolog_mounted | bool
+
+- name: Install the operations sudo policy in place
+  ansible.builtin.template:
+    src: 90-hermesops.j2
+    dest: "{{ access_sudoers_path }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+
+- name: Rotate the sudo text log
+  ansible.builtin.template:
+    src: logrotate-sudo-hermesops.j2
+    dest: /etc/logrotate.d/hermes-sudo
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the secret delivery command
+  ansible.builtin.copy:
+    src: hermes-secret-put
+    dest: /usr/local/sbin/hermes-secret-put
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Install the sudo I/O prune script
+  ansible.builtin.copy:
+    src: hermes-sudo-io-prune
+    dest: /usr/local/sbin/hermes-sudo-io-prune
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the sudo I/O prune service
+  ansible.builtin.template:
+    src: hermes-sudo-io-prune.service.j2
+    dest: /etc/systemd/system/hermes-sudo-io-prune.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the sudo I/O prune timer
+  ansible.builtin.template:
+    src: hermes-sudo-io-prune.timer.j2
+    dest: /etc/systemd/system/hermes-sudo-io-prune.timer
+    owner: root
+    group: root
+    mode: "0644"
+
+# systemctl enable fails when the unit is not installed yet. The first
+# --check does not write the unit, so the enable runs only once the file
+# is on disk. A later --check must report no change.
+- name: Stat the sudo I/O prune timer unit
+  ansible.builtin.stat:
+    path: /etc/systemd/system/hermes-sudo-io-prune.timer
+  register: access_prune_timer_unit
+  changed_when: false
+  check_mode: false
+
+- name: Enable the sudo I/O prune timer
+  ansible.builtin.systemd_service:
+    name: hermes-sudo-io-prune.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: (access_prune_timer_unit.stat | default({})).exists | default(false)

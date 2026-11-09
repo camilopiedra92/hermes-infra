@@ -1,0 +1,20 @@
+# {{ ansible_managed }}
+# The only way out for the service user. It listens on loopback, relays CONNECT to port 443 and only
+# for the names in the filter. It does not look inside TLS. It runs in the foreground (-d) and logs every
+# connection and every refusal to its standard output, which the unit sends to the journal.
+User {{ hermes_pins.egress.proxy_user }}
+Group {{ hermes_pins.egress.proxy_user }}
+Listen {{ hermes_pins.egress.nft.proxy_address }}
+Port {{ hermes_pins.egress.nft.proxy_port }}
+Allow {{ hermes_pins.egress.nft.proxy_address }}
+Timeout 600
+MaxClients 20
+DisableViaHeader Yes
+PidFile "/run/tinyproxy/tinyproxy.pid"
+LogLevel Info
+ConnectPort 443
+Filter "/etc/tinyproxy/hermes-allow.filter"
+FilterType ere
+FilterCaseSensitive Off
+FilterURLs Off
+FilterDefaultDeny Yes

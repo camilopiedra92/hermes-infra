@@ -1,0 +1,93 @@
+---
+# The gateway as a user service of the service user. Nothing here starts it:
+# it needs egress to Telegram and Anthropic and a Claude login first. `hermes gateway install` starts
+# and enables the service by default, which on 2026-11-08 sent it into a connect loop against the uid hold.
+- name: Require the Hermes install
+  ansible.builtin.stat:
+    path: "{{ hermes_gateway_cli }}"
+  register: hermes_gateway_cli_stat
+  changed_when: false
+  check_mode: false
+
+- name: Fail when Hermes is not installed
+  ansible.builtin.assert:
+    that: hermes_gateway_cli_stat.stat.exists or ansible_check_mode
+    fail_msg: Install Hermes first (ansible-playbook --tags install, with the install window open).
+
+- name: Create the drop-in directory of the user unit
+  ansible.builtin.file:
+    path: "{{ hermes_pins.gateway.user_dropin_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Pin the limits of the gateway in a root-owned drop-in
+  ansible.builtin.template:
+    src: gateway-limits.conf.j2
+    dest: "{{ hermes_pins.gateway.user_dropin_dir }}/10-limits.conf"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create the drop-in directory of the user manager
+  ansible.builtin.file:
+    path: "{{ hermes_pins.gateway.system_dropin | dirname | replace('{uid}', hermes_gateway_uid) }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Make the session of the service user wait for nftables
+  ansible.builtin.template:
+    src: user-after-nftables.conf.j2
+    dest: "{{ hermes_pins.gateway.system_dropin | replace('{uid}', hermes_gateway_uid) }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: hermes_gateway_after_nftables
+
+# The ordering takes effect the next time the manager starts. Restarting it here would end the session.
+- name: Reload systemd so the ordering is known
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: hermes_gateway_after_nftables.changed and not ansible_check_mode
+
+- name: Require the user manager of the service user
+  ansible.builtin.stat:
+    path: "/run/user/{{ hermes_gateway_uid }}/bus"
+  register: hermes_gateway_bus
+  changed_when: false
+  check_mode: false
+
+- name: Let Hermes write its own user unit, neither started nor enabled
+  ansible.builtin.command:
+    argv: >-
+      {{ hermes_gateway_as_service_user
+         + hermes_gateway_user_manager_env
+         + [hermes_gateway_cli, 'gateway', 'install',
+            '--no-start-now', '--no-start-on-login'] }}
+    creates: "{{ hermes_gateway_user_home }}/.config/systemd/user/{{ hermes_pins.gateway.unit }}"
+  vars:
+    hermes_gateway_user_manager_env:
+      - "XDG_RUNTIME_DIR=/run/user/{{ hermes_gateway_uid }}"
+      - "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ hermes_gateway_uid }}/bus"
+  when: hermes_gateway_bus.stat.exists and not ansible_check_mode
+
+# the gateway starts by itself after a reboot. The user manager of the service user waits for
+# nftables (user-after-nftables drop-in), so the egress ruleset exists before the unit can start. This task enables
+# the unit only. It never starts it: a running gateway is restarted by the operator, not by a play.
+- name: Enable the gateway at boot, without starting it
+  ansible.builtin.systemd_service:
+    name: "{{ hermes_pins.gateway.unit }}"
+    scope: user
+    enabled: true
+  become: true
+  become_user: "{{ hermes_pins.state.owner }}"
+  vars:
+    # The module files of a task run as the service user live in /tmp, not in its home.
+    ansible_remote_tmp: "/tmp/.ansible-{{ hermes_pins.state.owner }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ hermes_gateway_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ hermes_gateway_uid }}/bus"
+  when: hermes_gateway_bus.stat.exists

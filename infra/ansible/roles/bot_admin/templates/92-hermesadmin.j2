@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+# (owner decision, 2026-11-09): the Hermes bot is the single entry point for development,
+# administration and operation of this host, and it has total control. It reaches this account over
+# SSH on 127.0.0.1 only. Every sudo command and sub-command is logged as text. The terminal I/O is not recorded here:
+# Hermes keeps every tool call and its output in the session store, which is backed up, and a sudo I/O log of the bot
+# costs about sixteen inodes per command, which exhausted the capped volume of the operator's logs.
+Defaults:{{ hermes_pins.admin.user }} use_pty, log_subcmds
+Defaults:{{ hermes_pins.admin.user }} !log_input, !log_output
+Defaults:{{ hermes_pins.admin.user }} logfile={{ bot_admin_sudo_logfile }}
+{{ hermes_pins.admin.user }} ALL=(ALL:ALL) NOPASSWD: ALL

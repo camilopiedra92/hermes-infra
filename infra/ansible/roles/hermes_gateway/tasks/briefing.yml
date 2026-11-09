@@ -1,0 +1,29 @@
+---
+# The briefing the bot reads at the start of every conversation.
+#
+# Hermes loads AGENTS.md from the working directory of the gateway into the system prompt, after a scan for
+# injected instructions. The unit's working directory is the Hermes home of the service user. The file is
+# root-owned and the bot has no tool that writes files, so it cannot change what it is told.
+# The source lives here as briefing.md and is not called AGENTS.md in the repository, where a Hermes agent
+# working in a checkout would discover it as its own context.
+- name: Read the Hermes home of the service user
+  ansible.builtin.stat:
+    path: "{{ hermes_pins.install.hermes_home }}"
+  register: hermes_gateway_home_stat
+  changed_when: false
+  check_mode: false
+
+- name: Require the Hermes home before writing into it
+  ansible.builtin.assert:
+    that:
+      - hermes_gateway_home_stat.stat.exists or ansible_check_mode
+      - not hermes_gateway_home_stat.stat.exists or hermes_gateway_home_stat.stat.isdir
+    fail_msg: "{{ hermes_pins.install.hermes_home }} is missing; run the state and install steps first."
+
+- name: Install the briefing as the context file of the gateway
+  ansible.builtin.copy:
+    src: briefing.md
+    dest: "{{ hermes_pins.install.hermes_home }}/AGENTS.md"
+    owner: root
+    group: root
+    mode: "0644"

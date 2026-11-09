@@ -1,0 +1,173 @@
+---
+# The model path: the Claude Code CLI at one version, and the subscription plugin at one commit. Nothing here
+# logs in, starts the gateway or reads a credential. The login is the owner's, with `sudo hermes-claude-login`.
+#
+# The CLI is the platform package of @anthropic-ai/claude-code, which holds the native binary. The wrapper package only
+# runs a postinstall script that copies that binary into place, so neither npm nor a script is needed: the tarball is
+# downloaded by root, checked against the pinned sha512 and unpacked root-owned, where the service user can only run it.
+#
+# The plugin is installed by Hermes itself at one immutable commit, which needs the install window for the service user:
+#   sudo hermes-install-window open 20
+#   ansible-playbook … site.yml --tags model
+# The window closes at the end of this file, whatever happens. Re-running when both are in place needs no window.
+
+- name: Create the directory of the Claude Code downloads
+  ansible.builtin.file:
+    path: /usr/local/share/hermes
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download Claude Code at the pinned version, checked against its pinned hash
+  ansible.builtin.get_url:
+    url: "{{ hermes_pins.model.cli.url }}"
+    dest: "/usr/local/share/hermes/claude-code-{{ hermes_pins.model.cli.version }}-linux-x64.tgz"
+    checksum: "sha512:{{ hermes_pins.model.cli.sha512 }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create the root-owned directory of the CLI
+  ansible.builtin.file:
+    path: "{{ hermes_pins.model.cli.root }}/{{ hermes_pins.model.cli.version }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Unpack the CLI, root-owned and read-only to the service user
+  ansible.builtin.unarchive:
+    src: "/usr/local/share/hermes/claude-code-{{ hermes_pins.model.cli.version }}-linux-x64.tgz"
+    dest: "{{ hermes_pins.model.cli.root }}/{{ hermes_pins.model.cli.version }}"
+    remote_src: true
+    owner: root
+    group: root
+    creates: "{{ hermes_gateway_claude_binary }}"
+
+- name: Ask the CLI for its version, as the service user
+  ansible.builtin.command:
+    argv: "{{ hermes_gateway_as_service_user + [hermes_gateway_claude_binary, '--version'] }}"
+    chdir: /
+  register: hermes_gateway_claude_version
+  changed_when: false
+  check_mode: false
+  failed_when: hermes_pins.model.cli.version not in hermes_gateway_claude_version.stdout
+  when: not ansible_check_mode
+
+- name: Install the manifest script
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../bin/hermes/plugin-manifest.sh"
+    dest: "{{ hermes_gateway_manifest_script }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Read the plugin directory of the service user
+  ansible.builtin.stat:
+    path: "{{ hermes_gateway_plugin_dir }}"
+  register: hermes_gateway_plugin_stat
+  changed_when: false
+  check_mode: false
+
+- name: Read the hash of the installed plugin files
+  ansible.builtin.command:
+    argv: ["{{ hermes_gateway_manifest_script }}", "{{ hermes_gateway_plugin_dir }}"]
+  register: hermes_gateway_plugin_hash
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: hermes_gateway_plugin_stat.stat.exists
+
+- name: Decide whether the plugin is left to install
+  ansible.builtin.set_fact:
+    hermes_gateway_needs_plugin: >-
+      {{ not hermes_gateway_plugin_stat.stat.exists
+         or (hermes_gateway_plugin_hash.stdout | default('') | trim) != hermes_pins.model.plugin.manifest_sha256 }}
+
+- name: Read the state of the install window
+  ansible.builtin.command: /usr/local/sbin/hermes-install-window status
+  register: hermes_gateway_model_window
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Require the install window to be open
+  ansible.builtin.assert:
+    that:
+      - hermes_gateway_model_window.stdout_lines | first | default('') == 'open'
+    fail_msg: >-
+      The plugin is not installed at the pinned commit and the install window is closed.
+      Stop the gateway and the sandbox, then run: sudo hermes-install-window open 20
+  when:
+    - not ansible_check_mode
+    - hermes_gateway_needs_plugin
+
+- name: Install the plugin at the pinned commit and close the window whatever happens
+  when: hermes_gateway_needs_plugin
+  block:
+    - name: Let Hermes install the plugin at the pinned commit, over a directory that is not the pinned one
+      ansible.builtin.command:
+        argv: >-
+          {{ hermes_gateway_as_service_user
+             + [hermes_gateway_cli, 'plugins', 'install', hermes_pins.model.plugin.identifier,
+                '--ref', hermes_pins.model.plugin.ref, '--yes-deps', '--no-enable']
+             + (['--force'] if hermes_gateway_plugin_stat.stat.exists else []) }}
+        chdir: /
+      changed_when: true
+      when: not ansible_check_mode
+
+    - name: Read the hash of the plugin files after the install
+      ansible.builtin.command:
+        argv: ["{{ hermes_gateway_manifest_script }}", "{{ hermes_gateway_plugin_dir }}"]
+      register: hermes_gateway_plugin_hash_after
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Require the pinned files and nothing else
+      ansible.builtin.assert:
+        that:
+          - hermes_gateway_plugin_hash_after.stdout | trim == hermes_pins.model.plugin.manifest_sha256
+        fail_msg: >-
+          The installed plugin files do not hash to the pinned manifest
+          ({{ hermes_gateway_plugin_hash_after.stdout | trim }} against {{ hermes_pins.model.plugin.manifest_sha256 }}).
+        success_msg: The plugin files are the ones of commit {{ hermes_pins.model.plugin.ref }}.
+      when: not ansible_check_mode
+  always:
+    - name: Close the install window
+      ansible.builtin.command: /usr/local/sbin/hermes-install-window close
+      changed_when: false
+      when: not ansible_check_mode
+
+- name: Create the Claude login directory of the service user
+  ansible.builtin.file:
+    path: "{{ hermes_pins.model.claude_config_dir }}"
+    state: directory
+    owner: "{{ hermes_pins.state.owner }}"
+    group: "{{ hermes_pins.state.owner }}"
+    mode: "0700"
+
+- name: Create the drop-in directory of the user unit
+  ansible.builtin.file:
+    path: "{{ hermes_pins.gateway.user_dropin_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Pin the model path in a root-owned drop-in of the gateway
+  ansible.builtin.template:
+    src: gateway-model.conf.j2
+    dest: "{{ hermes_pins.gateway.user_dropin_dir }}/30-model.conf"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the login helper
+  ansible.builtin.template:
+    src: hermes-claude-login.j2
+    dest: /usr/local/sbin/hermes-claude-login
+    owner: root
+    group: root
+    mode: "0750"
+    validate: bash -n %s

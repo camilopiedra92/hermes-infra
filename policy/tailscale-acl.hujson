@@ -1,0 +1,92 @@
+// Tailnet policy for the Hermes host.
+// Applied by the owner with bin/tailnet-policy.py. Not applied by CI.
+// CI does not hold the OAuth client.
+//
+// Design:
+//   * The host is tag:hermes-prod. Tag owners: the owner's identity only.
+//     tag:hermes is the retired 2026-11-06 name and is not reintroduced.
+//   * The owner's human devices reach tag:hermes-prod on tcp/22 (OpenSSH).
+//   * Operator sessions (tag:hermes-ops, minted by the owner) reaches tag:hermes-prod on tcp/22 only.
+//   * No CI identity reaches the host.
+//   * No grant from the host toward any other tailnet device.
+//   * Tailscale SSH is the only SSH server on the tailnet address.
+//     sshd stays installed for the Hetzner console.
+//     Owner: check, 12h. tag:hermes-ops: accept.
+//     User hermesops only. No recorder. Tailscale rejects check tag-to-tag.
+{
+	"tagOwners": {
+		"tag:hermes-prod": ["camilopiedra92@gmail.com"],
+		"tag:hermes-ops":  ["camilopiedra92@gmail.com"],
+	},
+
+	"grants": [
+		// The owner's own (untagged) devices can reach each other.
+		{
+			"src": ["autogroup:member"],
+			"dst": ["autogroup:self"],
+			"ip":  ["*"],
+		},
+		// Human administration of the Hermes host.
+		{
+			"src": ["camilopiedra92@gmail.com"],
+			"dst": ["tag:hermes-prod"],
+			"ip":  ["tcp:22"],
+		},
+		// Diagnosis box.
+		{
+			"src": ["tag:hermes-ops"],
+			"dst": ["tag:hermes-prod"],
+			"ip":  ["tcp:22"],
+		},
+	],
+
+	// Tailscale SSH is the only SSH server on the tailnet address.
+	// sshd stays installed for the Hetzner console.
+	"ssh": [
+		{
+			"action":      "check",
+			"src":         ["camilopiedra92@gmail.com"],
+			"dst":         ["tag:hermes-prod"],
+			"users":       ["hermesops"],
+			"checkPeriod": "12h",
+		},
+		{
+			"action": "accept",
+			"src":    ["tag:hermes-ops"],
+			"dst":    ["tag:hermes-prod"],
+			"users":  ["hermesops"],
+		},
+	],
+
+	"tests": [
+		{
+			"src":    "camilopiedra92@gmail.com",
+			"accept": ["tag:hermes-prod:22"],
+			"deny":   ["tag:hermes-prod:80", "tag:hermes-prod:443", "tag:hermes-ops:22"],
+		},
+		{
+			"src":    "tag:hermes-ops",
+			"accept": ["tag:hermes-prod:22"],
+			"deny":   ["tag:hermes-prod:80", "tag:hermes-prod:5432"],
+		},
+		{
+			"src":  "tag:hermes-prod",
+			"deny": ["tag:hermes-ops:22", "tag:hermes-ops:1055", "camilopiedra92@gmail.com:22"],
+		},
+	],
+
+	"sshTests": [
+		{
+			"src":   "camilopiedra92@gmail.com",
+			"dst":   ["tag:hermes-prod"],
+			"check": ["hermesops"],
+			"deny":  ["root", "hermes", "ubuntu"],
+		},
+		{
+			"src":    "tag:hermes-ops",
+			"dst":    ["tag:hermes-prod"],
+			"accept": ["hermesops"],
+			"deny":   ["root", "hermes", "ubuntu"],
+		},
+	],
+}

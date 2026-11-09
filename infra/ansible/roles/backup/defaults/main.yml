@@ -1,0 +1,6 @@
+---
+# Off-host backup of the Hermes state to a free-tier Cloudflare R2 bucket (restic, client-side encrypted).
+backup_on_calendar: "*-*-* 07:00:00 UTC"   # 02:00 America/Bogota
+backup_randomized_delay: 15min
+backup_env_dir: /etc/hermes-backup
+backup_state_dir: /var/lib/hermes-backup

@@ -1,0 +1,7 @@
+---
+# Volumes to create. Each item: label, fs_label, image, mount, bytes, inodes ("" for none), unit, mode, owner.
+capped_volume_list: []
+# The directory that holds the image files. On this host it is on the root disk.
+capped_volume_store: /var/lib/hermes
+# The root filesystem keeps at least this share free after the new images are allocated.
+capped_volume_root_margin_percent: 30

@@ -1,0 +1,5 @@
+# {{ ansible_managed }}
+# AllowUsers accumulates across drop-ins, so hermesops (00-hardening.conf) keeps its access.
+# The bot's account is accepted only from the loopback address, and the nftables rule that lets the
+# service user reach port 22 matches the same address.
+AllowUsers {{ hermes_pins.admin.user }}@{{ hermes_pins.admin.host }}

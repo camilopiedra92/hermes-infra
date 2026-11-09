@@ -1,0 +1,34 @@
+---
+# Operations user created at bootstrap. This role checks it and does not
+# create, rename or delete it.
+access_ops_user: hermesops
+access_ops_uid: 1000
+
+# Same path as the temporary bootstrap drop-in. The role replaces that
+# file in place so a NOPASSWD rule is present for the whole run.
+access_sudoers_path: /etc/sudoers.d/90-hermesops
+
+# sudo requires the iolog directory to exist and to be owned by uid 0
+# before log_input / log_output will run a command. The directory is a
+# mount of a fixed-size image so the logs cannot grow into the root fs.
+access_iolog_root: /var/log/sudo-io
+access_iolog_image: /var/lib/hermes/sudo-io.img
+# 512 MiB. An existing image of another size or type is refused.
+access_iolog_bytes: 536870912
+# systemd unit name for Where=/var/log/sudo-io (- is escaped as \x2d).
+access_iolog_mount_unit: 'var-log-sudo\x2dio.mount'
+access_sudo_logfile: /var/log/sudo-hermesops.log
+
+# The image is the ceiling (512 MiB, including ext4 metadata). Prune keeps
+# ordinary use under access_io_max_mb so the volume is not left full.
+# Every sudo call leaves several small files (about 160 KB measured), and an
+# Ansible run is one call per task, about one a second. Pruning hourly left 88 MB
+# of slack, which two applies in a row used up. The slack must be at least
+# three times what a burst writes between two prunes: bin/test_sudo_io_budget.py.
+# Root filesystem is 75G (inventory 2026-11-07). The text log is on that
+# filesystem and is rotated by logrotate; it is not the I/O log.
+access_io_retention_days: 30
+access_io_max_mb: 250
+access_io_prune_interval_minutes: 5
+access_logfile_rotate: 14
+access_logfile_maxsize: 20M

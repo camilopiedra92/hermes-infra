@@ -1,0 +1,47 @@
+# {{ ansible_managed }}
+# Host input firewall. Hetzner firewall <firewall-id> stays
+# the outer layer with zero inbound rules; this is defense in depth.
+#
+# input:   default drop. lo, established/related, essential ICMP/ICMPv6,
+#          tcp {{ nftables_tailnet_tcp_ports | join(',') }} on {{ nftables_tailnet_iface }} only, udp/{{ nftables_tailscale_udp_port }} for Tailscale direct paths.
+# forward: default drop. Rootless Docker will need its own reviewed rules.
+# output:  accept for now. Per-user egress allowlists are a later gate.
+
+table inet hermes_filter
+delete table inet hermes_filter
+
+table inet hermes_filter {
+  chain input {
+    type filter hook input priority filter; policy drop;
+
+    iifname "lo" accept
+    ct state invalid drop
+    ct state { established, related } accept
+
+    # ICMPv4 essentials; echo rate-limited.
+    ip protocol icmp icmp type { destination-unreachable, time-exceeded, parameter-problem } accept
+    ip protocol icmp icmp type echo-request limit rate 5/second accept
+
+    # ICMPv6 essentials (RFC 4890): PMTU, errors, neighbour discovery.
+    meta l4proto ipv6-icmp icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem } accept
+    meta l4proto ipv6-icmp icmpv6 type { nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } ip6 hoplimit 255 accept
+    meta l4proto ipv6-icmp icmpv6 type echo-request limit rate 5/second accept
+
+    # Tailscale direct connections.
+    udp dport {{ nftables_tailscale_udp_port }} accept
+
+    # Administration on the tailnet only.
+    iifname "{{ nftables_tailnet_iface }}" tcp dport { {{ nftables_tailnet_tcp_ports | join(', ') }} } accept
+
+    counter comment "dropped input"
+  }
+
+  chain forward {
+    type filter hook forward priority filter; policy drop;
+    counter comment "dropped forward"
+  }
+
+  chain output {
+    type filter hook output priority filter; policy accept;
+  }
+}

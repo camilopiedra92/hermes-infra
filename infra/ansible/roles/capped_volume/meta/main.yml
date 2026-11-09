@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  author: cto
+  description: Fixed-size, fully reserved ext4 images mounted through systemd units
+  license: proprietary
+  min_ansible_version: "2.17"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

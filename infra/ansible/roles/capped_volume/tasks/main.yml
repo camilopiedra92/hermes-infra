@@ -1,0 +1,63 @@
+---
+- name: Stat each image before allocation
+  ansible.builtin.stat:
+    path: "{{ capped.image }}"
+  loop: "{{ capped_volume_list }}"
+  loop_control:
+    loop_var: capped
+    label: "{{ capped.label }}"
+  register: capped_volume_stats
+  changed_when: false
+  check_mode: false
+
+- name: Read free space where the images are stored
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - >-
+        import os, sys; p=sys.argv[1]; os.makedirs(p, exist_ok=True);
+        s=os.statvfs(p); print(s.f_bavail * s.f_bsize); print(s.f_blocks * s.f_frsize)
+      - "{{ capped_volume_store }}"
+  register: capped_volume_space
+  changed_when: false
+  check_mode: false
+
+# An image that already has its size needs no space on a later run.
+- name: Record bytes still to allocate
+  ansible.builtin.set_fact:
+    capped_volume_need: >-
+      {%- set ns = namespace(total=0) -%}
+      {%- for vol in capped_volume_list -%}
+      {%- set st = capped_volume_stats.results[loop.index0].stat | default({}) -%}
+      {%- if not ((st.exists | default(false)) and ((st.size | default(0) | int) == (vol.bytes | int))) -%}
+      {%- set ns.total = ns.total + (vol.bytes | int) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ ns.total }}
+  changed_when: false
+
+- name: Require the root margin after allocating the new images
+  ansible.builtin.assert:
+    that:
+      - >-
+        (capped_volume_space.stdout_lines[0] | int) - (capped_volume_need | int)
+        >= ((capped_volume_space.stdout_lines[1] | int) * (capped_volume_root_margin_percent | int) // 100)
+    fail_msg: >-
+      Allocating the capped images would leave less than {{ capped_volume_root_margin_percent }} percent free
+      on the filesystem that holds {{ capped_volume_store }}.
+
+- name: Ensure the image directory exists
+  ansible.builtin.file:
+    path: "{{ capped_volume_store }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Create a capped filesystem
+  ansible.builtin.include_tasks: volume.yml
+  loop: "{{ capped_volume_list }}"
+  loop_control:
+    loop_var: capped
+    label: "{{ capped.label }}"

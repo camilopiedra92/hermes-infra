@@ -1,0 +1,23 @@
+---
+# The command module does not run in check mode: it returns skipped and
+# stdout "". check_mode false runs this read. changed_when false keeps the
+# read out of the diff. An empty read must not be parsed as JSON.
+- name: Read Tailscale preferences
+  ansible.builtin.command: tailscale debug prefs
+  register: tailscale_node_prefs
+  changed_when: false
+  check_mode: false
+
+- name: Apply Tailscale SSH and hostname settings
+  ansible.builtin.command: >-
+    tailscale set
+    --ssh={{ tailscale_node_run_ssh | string | lower }}
+    --hostname={{ tailscale_node_hostname }}
+    {{ '--accept-risk=lose-ssh' if tailscale_node_accept_lose_ssh | bool else '' }}
+  when: >-
+    (tailscale_node_prefs.stdout | default('') | trim | length) > 0
+    and (
+      (tailscale_node_prefs.stdout | from_json).RunSSH != tailscale_node_run_ssh
+      or (tailscale_node_prefs.stdout | from_json).Hostname != tailscale_node_hostname
+    )
+  changed_when: true

@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Back up the Hermes state to R2 (restic)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hermes-backup
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+ProtectHome=false
+ProtectSystem=strict
+ReadWritePaths={{ backup_state_dir }} /home/hermes/.hermes /home/hermesworker/.hermes
+NoNewPrivileges=true
+CacheDirectory=hermes-backup
+Environment=RESTIC_CACHE_DIR=/var/cache/hermes-backup

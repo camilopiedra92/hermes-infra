@@ -1,0 +1,7 @@
+---
+# Interface that carries the tailnet.
+nftables_tailnet_iface: tailscale0
+# TCP ports reachable on the tailnet interface.
+nftables_tailnet_tcp_ports: [22]
+# UDP port tailscaled listens on for direct (peer-to-peer) connections.
+nftables_tailscale_udp_port: 41641

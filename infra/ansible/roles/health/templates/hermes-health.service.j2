@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Collect the health of the Hermes host
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hermes-health
+ProtectSystem=strict
+ReadWritePaths=/var/lib/hermes-health
+PrivateTmp=true
+NoNewPrivileges=false

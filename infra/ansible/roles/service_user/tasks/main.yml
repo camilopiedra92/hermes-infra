@@ -1,0 +1,30 @@
+---
+# The account that runs the admin gateway (tier 0 service, docs/ARCHITECTURE.md). It has no password, no login shell
+# and no sudo. Its user manager keeps running without a login session (linger) so the gateway survives reboots.
+- name: Load the Hermes pins
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../../bin/hermes/pins.json"
+    name: hermes_pins
+  tags: [always]
+
+- name: Create the group of the service user
+  ansible.builtin.group:
+    name: "{{ hermes_pins.egress.user.name }}"
+    gid: "{{ hermes_pins.egress.user.uid }}"
+    state: present
+
+- name: Create the service user
+  ansible.builtin.user:
+    name: "{{ hermes_pins.egress.user.name }}"
+    uid: "{{ hermes_pins.egress.user.uid }}"
+    group: "{{ hermes_pins.egress.user.name }}"
+    home: "/home/{{ hermes_pins.egress.user.name }}"
+    shell: /usr/sbin/nologin
+    create_home: true
+    password_lock: true
+    state: present
+
+- name: Keep the user manager of the service user running without a login session
+  ansible.builtin.command:
+    argv: [loginctl, enable-linger, "{{ hermes_pins.egress.user.name }}"]
+    creates: "/var/lib/systemd/linger/{{ hermes_pins.egress.user.name }}"

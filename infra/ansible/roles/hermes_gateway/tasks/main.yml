@@ -1,0 +1,66 @@
+---
+- name: Load the Hermes pins
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../../bin/hermes/pins.json"
+    name: hermes_pins
+  tags: [always]
+
+- name: Read the service account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ hermes_pins.state.owner }}"
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  tags: [always]
+
+# The mount point is inside the home of the service user. If that account or its home were missing,
+# creating the mount point would create the home owned by root. The sandbox role creates the user.
+- name: Require the service account and its home
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['getent_passwd'][hermes_pins.state.owner] is defined
+      - ansible_facts['getent_passwd'][hermes_pins.state.owner][4] == (hermes_pins.state.mount | dirname)
+    fail_msg: >-
+      User {{ hermes_pins.state.owner }} must exist with home {{ hermes_pins.state.mount | dirname }}
+      before the state volume is mounted inside it. Run the sandbox role first.
+  when: not ansible_check_mode or (ansible_facts['getent_passwd'][hermes_pins.state.owner] is defined)
+  tags: [always]
+
+- name: Create the capped state volume
+  ansible.builtin.import_tasks: state.yml
+  tags: [state]
+
+- name: Pin the policy the service user cannot change
+  ansible.builtin.import_tasks: managed.yml
+  tags: [managed]
+
+- name: Install the install-window script
+  ansible.builtin.template:
+    src: hermes-install-window.j2
+    dest: /usr/local/sbin/hermes-install-window
+    owner: root
+    group: root
+    mode: "0750"
+    validate: bash -n %s
+  tags: [window]
+
+- name: Install the gateway unit, its limits and its boot order
+  ansible.builtin.import_tasks: gateway.yml
+  tags: [gateway, never]
+
+- name: Install the proxy that is the only way out for the service user
+  ansible.builtin.import_tasks: egress.yml
+  tags: [egress, never]
+
+- name: Install the briefing the bot reads at the start of every conversation
+  ansible.builtin.import_tasks: briefing.yml
+  tags: [briefing]
+
+- name: Install the model path, the pinned CLI and plugin and the login helper
+  ansible.builtin.import_tasks: model.yml
+  tags: [model, never]
+
+- name: Install Hermes at the pinned commit
+  ansible.builtin.import_tasks: install.yml
+  tags: [install, never]

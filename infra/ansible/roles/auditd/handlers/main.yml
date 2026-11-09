@@ -1,0 +1,20 @@
+---
+# service(8) runs the init script's stop/start. The unit's
+# ExecStartPost loads /etc/audit/rules.d when auditd comes back.
+- name: Restart auditd
+  ansible.builtin.service:
+    name: auditd
+    state: restarted
+    use: service
+
+- name: Load audit rules
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/augenrules
+      - --load
+  changed_when: true
+
+- name: Restart systemd-journald
+  ansible.builtin.systemd_service:
+    name: systemd-journald
+    state: restarted

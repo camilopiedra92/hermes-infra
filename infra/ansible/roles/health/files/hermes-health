@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Collect the health of the Hermes host into a world-readable JSON status file. Ansible managed.
+
+Runs as root from a systemd timer. It reads, it never changes anything. The Hermes cron job
+`host-health` (no-agent mode) turns state changes into Telegram messages.
+"""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import time
+from pathlib import Path
+
+OUT = Path("/var/lib/hermes-health/status.json")
+BACKUP_STATUS = Path("/var/lib/hermes-backup/status.json")
+STATE_MOUNT = "/home/hermes/.hermes"
+BACKUP_MAX_AGE = 26 * 3600
+DISK_WARN = 0.85
+MEM_MIN_MB = 300
+
+
+def run(*cmd: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+
+
+def active(unit: str, user: str | None = None) -> bool:
+    if user:
+        uid = run("id", "-u", user).stdout.strip()
+        done = run("runuser", "-u", user, "--", "env", f"XDG_RUNTIME_DIR=/run/user/{uid}",
+                   "systemctl", "--user", "is-active", unit)
+    else:
+        done = run("systemctl", "is-active", unit)
+    return done.stdout.strip() == "active"
+
+
+def main() -> None:
+    problems: list[str] = []
+    info: dict[str, object] = {}
+
+    for unit in ("ssh", "tailscaled", "nftables", "tinyproxy", "auditd", "cron"):
+        if not active(unit):
+            problems.append(f"service {unit} is not active")
+    for user in ("hermes", "hermesworker"):
+        if not active("hermes-gateway.service", user=user):
+            problems.append(f"the Hermes gateway of {user} is not active")
+        uid = run("id", "-u", user).stdout.strip()
+        enabled = run("runuser", "-u", user, "--", "env", f"XDG_RUNTIME_DIR=/run/user/{uid}",
+                      "systemctl", "--user", "is-enabled", "hermes-gateway.service").stdout.strip()
+        if enabled != "enabled":
+            problems.append(f"the Hermes gateway of {user} is not enabled at boot")
+
+    failed = [line.split()[1] for line in run("systemctl", "--failed", "--no-legend", "--plain").stdout.splitlines() if line.split()]
+    if failed:
+        problems.append("failed units: " + ", ".join(failed))
+
+    try:
+        backup = json.loads(BACKUP_STATUS.read_text(encoding="utf-8"))
+        age = time.time() - backup["finished"]
+        info["backup_age_hours"] = round(age / 3600, 1)
+        if not backup.get("ok"):
+            problems.append("the last backup failed: " + str(backup.get("error", "unknown")))
+        elif age > BACKUP_MAX_AGE:
+            problems.append(f"the last good backup is {age / 3600:.0f} hours old")
+        if backup.get("warn"):
+            problems.append("the backup repository is close to the R2 free tier")
+    except (OSError, ValueError, KeyError):
+        problems.append("there is no backup status yet")
+
+    for label, path in (("root disk", "/"), ("state volume", STATE_MOUNT), ("worker state volume", "/home/hermesworker/.hermes")):
+        usage = shutil.disk_usage(path)
+        ratio = usage.used / usage.total
+        info[label] = round(ratio, 2)
+        if ratio > DISK_WARN:
+            problems.append(f"{label} is {ratio:.0%} full")
+
+    meminfo = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
+    available_mb = int(meminfo["MemAvailable"].split()[0]) // 1024
+    info["memory_available_mb"] = available_mb
+    if available_mb < MEM_MIN_MB:
+        problems.append(f"only {available_mb} MB of memory is available")
+
+    if Path("/run/reboot-required").exists():
+        info["reboot_required"] = True
+    upgrades = run("apt-get", "-s", "upgrade").stdout.count("\nInst ")
+    info["pending_upgrades"] = upgrades
+
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    tmp = OUT.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"time": int(time.time()), "problems": problems, "info": info}), encoding="utf-8")
+    os.chmod(tmp, 0o644)
+    tmp.replace(OUT)
+
+
+if __name__ == "__main__":
+    main()

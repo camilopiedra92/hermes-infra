@@ -1,0 +1,62 @@
+#!/bin/bash
+# Close, open or inspect the channel the Hermes bot uses to administer this host (ADR-0029).
+#
+#   hermes-admin-channel status   show whether the channel is open and who is on it
+#   hermes-admin-channel off      remove the key, end every session of the account, keep it closed
+#   hermes-admin-channel on       put the key back
+#
+# `off` moves the authorized key to a file only root can read and leaves the account, its sudoers file
+# and its audit trail in place. While that file exists the Ansible role keeps the channel closed.
+# Run it as root, from an operator session or from the provider's web console.
+set -euo pipefail
+
+root=${HERMES_ADMIN_ROOT:-}
+account=${HERMES_ADMIN_ACCOUNT:-hermesadmin}
+keys="${root}/home/${account}/.ssh/authorized_keys"
+off_file="${root}/var/lib/hermes/admin-authorized_keys.off"
+
+is_open() { [[ -s $keys && ! -e $off_file ]]; }
+
+case ${1:-} in
+  status)
+    if is_open; then echo "admin channel: on"; else echo "admin channel: off"; fi
+    sessions=0
+    if [[ -z $root ]]; then
+      sessions=$(pgrep -u "$account" -c sshd 2>/dev/null || true)
+    fi
+    echo "sessions: ${sessions:-0}"
+    ;;
+  off)
+    if [[ -e $off_file ]]; then
+      echo "admin channel: already off"
+    elif [[ -s $keys ]]; then
+      install -d -m 0755 -o root -g root "$(dirname "$off_file")" 2>/dev/null || mkdir -p "$(dirname "$off_file")"
+      mv -- "$keys" "$off_file"
+      chmod 0600 "$off_file"
+      echo "admin channel: off"
+    else
+      echo "hermes-admin-channel: there is no key to move" >&2
+      exit 1
+    fi
+    if [[ -z $root ]]; then
+      loginctl terminate-user "$account" 2>/dev/null || true
+      pkill -KILL -u "$account" 2>/dev/null || true
+    fi
+    ;;
+  on)
+    if [[ ! -e $off_file ]]; then
+      echo "hermes-admin-channel: the channel is not closed; run the Ansible role if the key is missing" >&2
+      exit 1
+    fi
+    mv -- "$off_file" "$keys"
+    if [[ -z $root ]]; then
+      chown "$account:$account" "$keys"
+    fi
+    chmod 0600 "$keys"
+    echo "admin channel: on"
+    ;;
+  *)
+    echo "usage: hermes-admin-channel status|off|on" >&2
+    exit 2
+    ;;
+esac

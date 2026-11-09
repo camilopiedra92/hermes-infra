@@ -1,0 +1,28 @@
+# {{ ansible_managed }}
+# The proxy is up before the session of {{ hermes_pins.state.owner }} and the rules that bound it come first
+# Without it the service has no network at all, not an open one.
+[Unit]
+After=nftables.service
+Requires=nftables.service
+Before=user@{{ hermes_gateway_uid }}.service
+
+[Service]
+ExecStart=
+ExecStart=/usr/bin/tinyproxy -d -c /etc/tinyproxy/tinyproxy.conf
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+# No IPv6 sockets: the proxy goes to the IPv4 address at once. Measured 2026-11-08 from this host, api.telegram.org over IPv6
+# lost 2 of 15 connections and over IPv4 none, and tinyproxy tries the addresses in DNS order and waits out each one.
+RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK
+ReadWritePaths=/run/tinyproxy
+RuntimeDirectory=tinyproxy
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_CHOWN
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native

@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""Back up the Hermes state to restic on R2. Ansible managed.
+
+Databases go through SQLite's online backup API, never a raw copy. The file list is an allowlist of state, so the
+bot token, the Claude login and auth.json are never read. Tools, installs and caches are reproducible and skipped.
+"""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import sqlite3
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ENV_FILE = Path(os.environ.get("HERMES_BACKUP_ENV", "/etc/hermes-backup/restic.env"))
+STATES = [Path(p) for p in os.environ.get("HERMES_BACKUP_STATES", "/home/hermes/.hermes:/home/hermesworker/.hermes").split(":")]
+WORK = Path(os.environ.get("HERMES_BACKUP_WORK", "/var/lib/hermes-backup"))
+STAGE = WORK / "stage"
+STATUS = WORK / "status.json"
+WARN_BYTES = 7_000_000_000  # the R2 free tier is 10 GB
+KEEP = ["--keep-daily", "14", "--keep-weekly", "8", "--keep-monthly", "6"]
+INCLUDE = ["memories", "skills", "cron", "sessions", "scripts", "hooks", "pairing", "platforms", "state",
+           "kanban", "config.yaml", "SOUL.md", "channel_directory.json", "logs"]
+EXCLUDE = ["*.lock", "*.sock", "*.pid", ".env", "auth.json"]
+
+
+def load_env() -> dict[str, str]:
+    env = dict(os.environ)
+    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, _, value = line.partition("=")
+            env[key.strip()] = value.strip()
+    return env
+
+
+def restic(env: dict[str, str], *args: str, capture: bool = False) -> str:
+    done = subprocess.run(["restic", *args], env=env, check=True, text=True,
+                          stdout=subprocess.PIPE if capture else None)
+    return done.stdout if capture else ""
+
+
+def stage_databases() -> list[str]:
+    shutil.rmtree(STAGE, ignore_errors=True)
+    STAGE.mkdir(parents=True, mode=0o700)
+    staged = []
+    for state in STATES:
+        staged += stage_state(state)
+    return staged
+
+
+def stage_state(state: Path) -> list[str]:
+    staged = []
+    for db in sorted(state.glob("*.db")) + sorted(state.glob("*/*.db")):
+        target = STAGE / str(state).lstrip("/") / db.relative_to(state)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        src = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=30)
+        dst = sqlite3.connect(target)
+        try:
+            src.backup(dst)
+            if dst.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                raise RuntimeError(f"integrity_check failed for {db}")
+        finally:
+            dst.close()
+            src.close()
+        staged.append(str(target.relative_to(STAGE)))
+    return staged
+
+
+def main() -> int:
+    started = time.time()
+    env = load_env()
+    try:
+        restic(env, "cat", "config", capture=True)
+    except subprocess.CalledProcessError:
+        restic(env, "init")
+    staged = stage_databases()
+    paths = [str(state / p) for state in STATES for p in INCLUDE if (state / p).exists()]
+    args = ["backup", "--tag", "hermes-state", "--host", "hermes-prod", "--one-file-system"]
+    for pattern in EXCLUDE:
+        args += ["--exclude", pattern]
+    restic(env, *args, *paths, str(STAGE))
+    restic(env, "forget", "--prune", "--tag", "hermes-state", *KEEP)
+    restic(env, "check", "--read-data-subset=5%")
+    size = int(json.loads(restic(env, "stats", "--mode", "raw-data", "--json", capture=True))["total_size"])
+    shutil.rmtree(STAGE, ignore_errors=True)
+    STATUS.write_text(json.dumps({"ok": True, "finished": int(time.time()), "seconds": int(time.time() - started),
+                                  "databases": staged, "repo_bytes": size, "warn": size > WARN_BYTES}),
+                      encoding="utf-8")
+    if size > WARN_BYTES:
+        print(f"WARNING: repository is {size} bytes, near the 10 GB free tier", file=sys.stderr)
+        return 3
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except Exception as exc:  # noqa: BLE001 - the timer must fail visibly
+        WORK.mkdir(parents=True, exist_ok=True)
+        STATUS.write_text(json.dumps({"ok": False, "finished": int(time.time()), "error": str(exc)}),
+                          encoding="utf-8")
+        raise

@@ -1,0 +1,9 @@
+---
+# Tailscale SSH is the SSH server on the tailnet address.
+# The host runs it. sshd stays installed for the Hetzner console.
+tailscale_node_run_ssh: true
+# Turning Tailscale SSH on over a Tailscale connection ends that session, and
+# `tailscale set` refuses without --accept-risk=lose-ssh. Set this to true only
+# for that one change, with the dead-man timer armed (operator-access.md).
+tailscale_node_accept_lose_ssh: false
+tailscale_node_hostname: hermes

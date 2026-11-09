@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+# The install window: a bounded, audited hole in the uid hold, so that the
+# installer can reach git, uv, PyPI, Node and the other tools in pm/lock.json. Hermes checks their hashes.
+#
+#   hermes-install-window open MINUTES   arm the timer that closes it, then open (1 to 30)
+#   hermes-install-window close          empty the chain and stop the timer
+#   hermes-install-window status
+#
+# The timer is armed before any rule is added. If it cannot be, nothing opens. Reloading nftables also
+# closes the window, because the persistent table defines the chain empty.
+set -euo pipefail
+
+TABLE="{{ hermes_pins.egress.nft.table }}"
+CHAIN="{{ hermes_pins.egress.nft.window_chain }}"
+UID_HERMES="{{ hermes_pins.egress.user.uid }}"
+USER_HERMES="{{ hermes_pins.egress.user.name }}"
+SELF="/usr/local/sbin/hermes-install-window"
+TIMER="hermes-install-window-close"
+MAX_MINUTES=30
+
+log() { logger -t hermes-install-window -- "$*"; }
+die() { echo "hermes-install-window: $*" >&2; exit 1; }
+
+is_open() { [ -n "$(nft list chain inet "$TABLE" "$CHAIN" 2>/dev/null | grep -E 'accept' || true)" ]; }
+
+busy() {
+  # The gateway and every sandbox must be down while the uid may reach the network.
+  pgrep -u "$UID_HERMES" -f 'hermes gateway|hermes-agent|conmon|runsc|podman' >/dev/null 2>&1
+}
+
+cmd_open() {
+  local minutes="${1:-}"
+  [[ "$minutes" =~ ^[0-9]+$ ]] || die "open needs a number of minutes, 1 to $MAX_MINUTES"
+  [ "$minutes" -ge 1 ] && [ "$minutes" -le "$MAX_MINUTES" ] || die "minutes must be 1 to $MAX_MINUTES"
+  is_open && die "a window is already open"
+  if busy; then die "the gateway or a container of $USER_HERMES is running; stop it first"; fi
+
+  systemd-run --quiet --unit="$TIMER" --on-active="${minutes}min" "$SELF" close \
+    || die "cannot arm the timer that closes the window; nothing was opened"
+  systemctl is-active "$TIMER.timer" >/dev/null || die "the closing timer is not active; nothing was opened"
+
+  nft add rule inet "$TABLE" "$CHAIN" tcp dport '{ 80, 443 }' counter accept
+  nft add rule inet "$TABLE" "$CHAIN" ip daddr 127.0.0.53 udp dport 53 accept
+  nft add rule inet "$TABLE" "$CHAIN" ip daddr 127.0.0.53 tcp dport 53 accept
+  log "open for ${minutes} minutes: tcp 80 and 443 and the local resolver, uid $UID_HERMES"
+  echo "open for ${minutes} minutes (closes by itself)"
+}
+
+cmd_close() {
+  nft flush chain inet "$TABLE" "$CHAIN"
+  systemctl stop "$TIMER.timer" >/dev/null 2>&1 || true
+  log "close: chain $CHAIN emptied"
+  echo "closed"
+}
+
+cmd_status() {
+  if is_open; then echo "open"; nft list chain inet "$TABLE" "$CHAIN"; else echo "closed"; fi
+}
+
+case "${1:-}" in
+  open) shift; cmd_open "${1:-}" ;;
+  close) cmd_close ;;
+  status) cmd_status ;;
+  *) die "usage: hermes-install-window open MINUTES | close | status" ;;
+esac

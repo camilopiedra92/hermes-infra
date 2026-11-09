@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+# Disk caps so the journal cannot fill the 75G root filesystem
+# No off-host copy of these logs.
+[Journal]
+Storage=persistent
+SystemMaxUse={{ auditd_journal_system_max_use }}
+SystemKeepFree={{ auditd_journal_system_keep_free }}
+SystemMaxFileSize={{ auditd_journal_system_max_file_size }}
+RuntimeMaxUse={{ auditd_journal_runtime_max_use }}
+MaxRetentionSec={{ auditd_journal_max_retention_sec }}

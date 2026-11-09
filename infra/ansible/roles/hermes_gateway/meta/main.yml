@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  author: cto
+  description: The Hermes gateway of user hermes on the capped state volume
+  license: proprietary
+  min_ansible_version: "2.17"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

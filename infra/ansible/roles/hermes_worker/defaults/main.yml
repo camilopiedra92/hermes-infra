@@ -1,0 +1,29 @@
+---
+# Tier 1: the worker agent (docs/ARCHITECTURE.md). Its own account, its own code copy, its own state.
+hermes_worker_user: hermesworker
+hermes_worker_home: /home/hermesworker
+hermes_worker_hermes_home: /home/hermesworker/.hermes
+hermes_worker_code_parent: /opt/hermes-worker
+hermes_worker_code_dir: /opt/hermes-worker/hermes-agent
+hermes_worker_subid_start: 296608
+hermes_worker_subid_count: 65536
+hermes_worker_state_bytes: 6442450944
+hermes_worker_state_inodes: 262144
+hermes_worker_containers_bytes: 4294967296
+hermes_worker_containers_inodes: 262144
+hermes_worker_as_user:
+  - sudo
+  - -u
+  - "{{ hermes_worker_user }}"
+  - -H
+  - env
+  - -i
+  - "HOME={{ hermes_worker_home }}"
+  - "HERMES_HOME={{ hermes_worker_hermes_home }}"
+  - "PATH={{ hermes_worker_home }}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+hermes_worker_managed_dir: /etc/hermes-worker
+hermes_worker_claude_config_dir: /home/hermesworker/.claude
+hermes_worker_plugin_dir: "{{ hermes_worker_hermes_home }}/plugins/{{ 'claude-subscription-directsdk-experimental' }}"
+hermes_worker_gateway_unit: hermes-gateway.service
+hermes_worker_uid: "{{ ansible_facts['getent_passwd'][hermes_worker_user][1] }}"
+hermes_worker_slice_memory_max: 2G

@@ -1,0 +1,53 @@
+---
+- name: Install restic from the Ubuntu archive
+  ansible.builtin.apt:
+    name: restic
+    state: present
+
+- name: Create the credentials directory (root only; secrets come from the owner, never from git)
+  ansible.builtin.file:
+    path: "{{ backup_env_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Create the working directory
+  ansible.builtin.file:
+    path: "{{ backup_state_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install the backup script
+  ansible.builtin.copy:
+    src: hermes-backup
+    dest: /usr/local/sbin/hermes-backup
+    owner: root
+    group: root
+    mode: "0750"
+    validate: python3 -m py_compile %s
+
+- name: Install the service and the timer
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - hermes-backup.service
+    - hermes-backup.timer
+  register: backup_units
+
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: backup_units is changed
+
+- name: Enable the timer
+  ansible.builtin.systemd_service:
+    name: hermes-backup.timer
+    enabled: true
+    state: started

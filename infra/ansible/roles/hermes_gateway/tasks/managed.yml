@@ -1,0 +1,54 @@
+---
+# Managed scope: root-owned, so the service user can read the policy and cannot change it.
+- name: Create the managed scope directory
+  ansible.builtin.file:
+    path: /etc/hermes
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the managed configuration
+  ansible.builtin.copy:
+    src: managed-config.yaml
+    dest: /etc/hermes/config.yaml
+    owner: root
+    group: root
+    mode: "0644"
+
+# The Telegram users who may talk to the bot are pinned here, so the service user cannot add itself.
+# The operator gives them once, as hermes_gateway_telegram_allowed_users.
+# Without the variable the list already on the host is kept, and with neither the role refuses to write the file:
+# the gateway must never run without an allowlist.
+# Learned on 2026-11-08: `--tags gateway` ran this file without the variable, because the role carries that tag,
+# and the line was removed.
+- name: Read the managed environment that is already on the host
+  ansible.builtin.slurp:
+    src: /etc/hermes/.env
+  register: hermes_gateway_env_before
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Decide the Telegram users who may talk to the bot
+  ansible.builtin.set_fact:
+    hermes_gateway_allowed_users_effective: >-
+      {{ hermes_gateway_telegram_allowed_users | default(
+           hermes_gateway_env_before.content | default('') | b64decode
+           | regex_findall('(?m)^TELEGRAM_ALLOWED_USERS=([0-9,]+)$') | first | default(''), true) | string | trim }}
+
+- name: Refuse to write a managed environment with no allowed Telegram user
+  ansible.builtin.assert:
+    that:
+      - hermes_gateway_allowed_users_effective is match('^[0-9]+(,[0-9]+)*$')
+    fail_msg: >-
+      No Telegram user is allowed. Give the owner's numeric id once with
+      -e hermes_gateway_telegram_allowed_users=<id>; afterwards the id on the host is kept.
+
+- name: Install the managed environment
+  ansible.builtin.template:
+    src: managed.env.j2
+    dest: /etc/hermes/.env
+    owner: root
+    group: root
+    mode: "0644"

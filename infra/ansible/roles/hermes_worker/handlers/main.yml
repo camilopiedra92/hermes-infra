@@ -1,0 +1,4 @@
+---
+- name: Load the worker egress rule
+  ansible.builtin.command: /usr/sbin/nft -f /etc/nftables.d/30-hermes-worker.nft
+  changed_when: true

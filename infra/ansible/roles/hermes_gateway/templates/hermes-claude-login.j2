@@ -1,0 +1,36 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Run the Claude Code login as the service user, the way the gateway will run the CLI.
+#
+#   sudo hermes-claude-login            log in; the CLI prints an address, open it in your own browser, paste the code back
+#   sudo hermes-claude-login status     who is logged in
+#   sudo hermes-claude-login logout
+#
+# Only the owner logs in: `claude auth login` is interactive and this repository never automates it. The sudoers rule for
+# this command carries NOLOG_INPUT and NOLOG_OUTPUT, so the code you paste is not kept in the sudo I/O log.
+# The CLI reaches Anthropic through the same proxy as the gateway, because the service user has no other route.
+set -euo pipefail
+umask 077
+
+action=${1:-login}
+case $action in
+  login | status | logout) ;;
+  *)
+    echo "hermes-claude-login: unknown action ${action} (login, status or logout)" >&2
+    exit 2
+    ;;
+esac
+[[ $# -le 1 ]] || { echo "hermes-claude-login: one action only" >&2; exit 2; }
+[[ -t 0 && -t 1 ]] || { echo "hermes-claude-login: run it from a terminal" >&2; exit 2; }
+
+install -d -o {{ hermes_pins.state.owner }} -g {{ hermes_pins.state.owner }} -m 0700 "{{ hermes_pins.model.claude_config_dir }}"
+
+exec runuser -u {{ hermes_pins.state.owner }} -- env -i \
+  HOME={{ hermes_gateway_user_home }} USER={{ hermes_pins.state.owner }} LOGNAME={{ hermes_pins.state.owner }} \
+  LANG=C.UTF-8 TERM="${TERM:-xterm}" \
+  PATH=/usr/local/bin:/usr/bin:/bin \
+  CLAUDE_CONFIG_DIR="{{ hermes_pins.model.claude_config_dir }}" \
+  HTTPS_PROXY="http://{{ hermes_pins.egress.nft.proxy_address }}:{{ hermes_pins.egress.nft.proxy_port }}" \
+  NO_PROXY="localhost,127.0.0.1,::1" \
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_AUTOUPDATER=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 \
+  "{{ hermes_gateway_claude_binary }}" auth "$action"

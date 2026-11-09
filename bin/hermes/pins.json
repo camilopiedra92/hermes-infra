@@ -1,0 +1,100 @@
+{
+  "repo": "https://github.com/NousResearch/hermes-agent.git",
+  "tag": "v0.23.0",
+  "commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
+  "files": {
+    "scripts/install.sh": "abf338605dae6dd28d101673ac6aed7995c955745db46d47676bc591a7957209",
+    "uv.lock": "5057a8a3cbc6d2b1f2059d66e27ffa43f447021f89779599dca416056574c064",
+    "pm/lock.json": "40b06778980ff8c50dcd97c0d9b39ba3eb4a7a242ea62eaeaaa9a90d68ea1a85",
+    "pyproject.toml": "b1531ab4807bc64441a3fe3f56d6c166dcf0074e3510e061a1377c4d05d3ca24"
+  },
+  "install": {
+    "code_parent": "/opt/hermes",
+    "code_dir": "/opt/hermes/hermes-agent",
+    "hermes_home": "/home/hermes/.hermes",
+    "flags": [
+      "--non-interactive",
+      "--skip-browser",
+      "--skip-computer-use"
+    ],
+    "extras": [
+      "telegram"
+    ],
+    "extra_libraries": [
+      "python-telegram-bot"
+    ]
+  },
+  "state": {
+    "image": "/var/lib/hermes/state.img",
+    "mount": "/home/hermes/.hermes",
+    "bytes": 6442450944,
+    "inodes": 262144,
+    "unit": "home-hermes-.hermes.mount",
+    "mode": "0700",
+    "owner": "hermes"
+  },
+  "gateway": {
+    "unit": "hermes-gateway.service",
+    "memory_max": "1G",
+    "memory_high": "896M",
+    "tasks_max": 512,
+    "system_dropin": "/etc/systemd/system/user@{uid}.service.d/60-hermes-nftables.conf",
+    "user_dropin_dir": "/etc/systemd/user/hermes-gateway.service.d"
+  },
+  "egress": {
+    "proxy_user": "tinyproxy",
+    "domains": [
+      "api.telegram.org",
+      "api.anthropic.com",
+      "platform.claude.com",
+      "console.anthropic.com"
+    ],
+    "user": {
+      "name": "hermes",
+      "uid": 1001
+    },
+    "nft": {
+      "table": "hermes_egress",
+      "hold_counter": "hermes_held",
+      "window_chain": "install_window",
+      "proxy_counter": "hermes_proxy",
+      "proxy_address": "127.0.0.1",
+      "proxy_port": 8888,
+      "admin_port": 22,
+      "admin_counter": "hermes_admin",
+      "loopback_ports": "32768-60999",
+      "loopback_counter": "hermes_loopback"
+    }
+  },
+  "model": {
+    "provider": "claude-subscription-directsdk-experimental",
+    "default_model": "claude-sonnet-5-5",
+    "claude_config_dir": "/home/hermes/.claude",
+    "stale_timeout_seconds": 900,
+    "cli": {
+      "version": "2.1.319",
+      "package": "@anthropic-ai/claude-code-linux-x64",
+      "url": "https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.319.tgz",
+      "sha512": "14ee12776dc13b554240f8897b9bc6ddb367995e7e6224dabbba3596a2b716be55944e132dd2a2c98a70411c045cef75904da5d76129da2ec9d7d4fc31dda839",
+      "root": "/opt/hermes/claude"
+    },
+    "plugin": {
+      "identifier": "NousResearch/hermes-official-plugins#claude-subscription-directsdk",
+      "ref": "13b2c1c9c8204bf333df240b2aacf98c3e6250b7",
+      "version": "0.3.4",
+      "manifest_sha256": "baf3ac3ab72cf08bb8626b1fcbe516aad13ef2b27e7cc9296fd57a64c2b6bf2f",
+      "install_name": "claude-subscription-directsdk-experimental",
+      "repository_directory": "claude-subscription-directsdk"
+    },
+    "reasoning_effort": "medium"
+  },
+  "admin": {
+    "user": "hermesadmin",
+    "uid": 1002,
+    "home": "/home/hermesadmin",
+    "host": "127.0.0.1",
+    "port": 22,
+    "key": "/home/hermes/.ssh/hermes-admin",
+    "comment": "hermes-bot-admin"
+  }
+}

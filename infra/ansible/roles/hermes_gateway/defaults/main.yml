@@ -1,0 +1,28 @@
+---
+# The pin, the image sizes and the paths live in bin/hermes/pins.json. tasks/main.yml loads
+# that file, so the CI install test and this role cannot drift.
+
+# The home of the service user, which is the parent of the state mount.
+hermes_gateway_user_home: "{{ hermes_pins.state.mount | dirname }}"
+
+# The service user starts from a clean environment, as under systemd. sudo would otherwise pass
+# the caller's variables and Hermes would read the wrong configuration.
+hermes_gateway_as_service_user:
+  - sudo
+  - -u
+  - "{{ hermes_pins.state.owner }}"
+  - -H
+  - env
+  - -i
+  - "HOME={{ hermes_gateway_user_home }}"
+  - "HERMES_HOME={{ hermes_pins.install.hermes_home }}"
+  - "PATH={{ hermes_gateway_user_home }}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+hermes_gateway_uid: "{{ ansible_facts['getent_passwd'][hermes_pins.state.owner][1] }}"
+
+hermes_gateway_cli: "{{ hermes_gateway_user_home }}/.local/bin/hermes"
+
+# The model path. The CLI is the native binary of the platform package, root-owned.
+hermes_gateway_claude_binary: "{{ hermes_pins.model.cli.root }}/{{ hermes_pins.model.cli.version }}/package/claude"
+hermes_gateway_plugin_dir: "{{ hermes_pins.install.hermes_home }}/plugins/{{ hermes_pins.model.plugin.install_name }}"
+hermes_gateway_manifest_script: /usr/local/share/hermes/plugin-manifest.sh

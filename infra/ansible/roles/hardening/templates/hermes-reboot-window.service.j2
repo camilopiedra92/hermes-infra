@@ -1,0 +1,7 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Reboot for pending updates inside the maintenance window
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'if [ -f /run/reboot-required ]; then systemctl reboot; fi'

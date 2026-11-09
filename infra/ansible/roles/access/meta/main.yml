@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  author: cto
+  description: Operations user sudo policy and sudo log retention
+  license: proprietary
+  min_ansible_version: "2.17"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

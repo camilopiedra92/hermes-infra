@@ -1,0 +1,131 @@
+---
+- name: Install auditd
+  ansible.builtin.apt:
+    name: auditd
+    state: present
+
+# Stats are reads. check_mode false runs them during --check.
+# changed_when false keeps the read out of the diff. A missing stat
+# is treated as "not there" instead of failing the template.
+- name: Stat auditd configuration
+  ansible.builtin.stat:
+    path: /etc/audit/auditd.conf
+  register: auditd_conf_file
+  changed_when: false
+  check_mode: false
+
+# apt has not created /etc/audit during the first --check. Editing a
+# missing file fails check mode. After the package is installed the file
+# exists and a later --check must report no change.
+- name: Bound auditd disk use
+  ansible.builtin.lineinfile:
+    path: /etc/audit/auditd.conf
+    regexp: '^{{ item.key }}\s*='
+    line: "{{ item.key }} = {{ item.value }}"
+  loop:
+    - key: max_log_file
+      value: "{{ auditd_max_log_file_mb }}"
+    - key: num_logs
+      value: "{{ auditd_num_logs }}"
+    - key: max_log_file_action
+      value: "{{ auditd_max_log_file_action }}"
+    - key: space_left
+      value: "{{ auditd_space_left_mb }}"
+    - key: space_left_action
+      value: "{{ auditd_space_left_action }}"
+    - key: admin_space_left
+      value: "{{ auditd_admin_space_left_mb }}"
+    - key: admin_space_left_action
+      value: "{{ auditd_admin_space_left_action }}"
+    - key: disk_full_action
+      value: "{{ auditd_disk_full_action }}"
+    - key: disk_error_action
+      value: "{{ auditd_disk_error_action }}"
+  when: (auditd_conf_file.stat | default({})).exists | default(false)
+  notify: Restart auditd
+
+- name: Stat the auditd service unit
+  ansible.builtin.stat:
+    path: /usr/lib/systemd/system/auditd.service
+  register: auditd_service_unit
+  changed_when: false
+  check_mode: false
+
+- name: Enable and start auditd
+  ansible.builtin.systemd_service:
+    name: auditd
+    enabled: true
+    state: started
+  when: (auditd_service_unit.stat | default({})).exists | default(false)
+
+- name: Ensure the nftables include directory exists for the watch
+  ansible.builtin.file:
+    path: /etc/nftables.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Stat the operations authorized_keys file
+  ansible.builtin.stat:
+    path: "/home/{{ auditd_ops_user }}/.ssh/authorized_keys"
+  register: auditd_ops_authorized_keys
+  changed_when: false
+  check_mode: false
+
+- name: Require the operations authorized_keys file
+  ansible.builtin.assert:
+    that:
+      - (auditd_ops_authorized_keys.stat | default({})).exists | default(false)
+    fail_msg: >-
+      /home/{{ auditd_ops_user }}/.ssh/authorized_keys is missing.
+      auditd will not load a watch for a path that does not exist.
+
+- name: Stat root authorized_keys
+  ansible.builtin.stat:
+    path: /root/.ssh/authorized_keys
+  register: auditd_root_authorized_keys
+  changed_when: false
+  check_mode: false
+
+- name: Stat the audit rules directory
+  ansible.builtin.stat:
+    path: /etc/audit/rules.d
+  register: auditd_rules_dir
+  changed_when: false
+  check_mode: false
+
+- name: Install the persistent audit rules
+  ansible.builtin.template:
+    src: 50-hermes.rules.j2
+    dest: /etc/audit/rules.d/50-hermes.rules
+    owner: root
+    group: root
+    mode: "0640"
+  when: (auditd_rules_dir.stat | default({})).exists | default(false)
+  notify: Load audit rules
+
+- name: Ensure the journald drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Stat the journald drop-in directory
+  ansible.builtin.stat:
+    path: /etc/systemd/journald.conf.d
+  register: auditd_journald_dir
+  changed_when: false
+  check_mode: false
+
+- name: Install journald disk limits
+  ansible.builtin.template:
+    src: journald-50-hermes.conf.j2
+    dest: /etc/systemd/journald.conf.d/50-hermes.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when: (auditd_journald_dir.stat | default({})).exists | default(false)
+  notify: Restart systemd-journald

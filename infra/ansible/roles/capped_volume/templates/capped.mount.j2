@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Fixed-size filesystem for {{ capped.label }}
+DefaultDependencies=yes
+RequiresMountsFor={{ capped.image }}
+Before=local-fs.target
+
+[Mount]
+What={{ capped.image }}
+Where={{ capped.mount }}
+Type=ext4
+Options=loop,nodev,nosuid,nofail
+
+[Install]
+WantedBy=local-fs.target

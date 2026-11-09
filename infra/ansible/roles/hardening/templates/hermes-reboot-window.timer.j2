@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Maintenance window for reboots (Sunday 05:00 America/Bogota)
+
+[Timer]
+OnCalendar={{ hardening_reboot_calendar }}
+Persistent=false
+
+[Install]
+WantedBy=timers.target

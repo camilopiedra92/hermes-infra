@@ -1,0 +1,144 @@
+#!/bin/bash
+# Remove whole, closed sudo I/O sessions under one user directory.
+#
+# A session is the directory that contains "log" (for example 00/00/01).
+# The sequence file and the parent sequence directories are left in place.
+# A session is kept when sudo still holds a lock on its log, or when any
+# file in the session is open. Streams are never unlinked one at a time.
+#
+# The disk ceiling is the filesystem mounted on /var/log/sudo-io, not this
+# script. Age and size only reclaim space inside that filesystem.
+#
+# Usage: hermes-sudo-io-prune DIRECTORY RETENTION_DAYS MAX_MB
+set -euo pipefail
+
+dir=${1:?directory}
+retention_days=${2:?retention days}
+max_mb=${3:?max megabytes}
+
+dir=$(readlink -f -- "$dir")
+case $dir in
+  /var/log/sudo-io/*) ;;
+  *)
+    echo "hermes-sudo-io-prune: refusing to prune ${dir}" >&2
+    exit 2
+    ;;
+esac
+case $dir in
+  *..*)
+    echo "hermes-sudo-io-prune: refusing to prune ${dir}" >&2
+    exit 2
+    ;;
+esac
+
+case $retention_days in
+  '' | *[!0-9]*)
+    echo "hermes-sudo-io-prune: retention days must be an integer" >&2
+    exit 2
+    ;;
+esac
+
+case $max_mb in
+  '' | *[!0-9]*)
+    echo "hermes-sudo-io-prune: max megabytes must be an integer" >&2
+    exit 2
+    ;;
+esac
+
+if [[ ! -d $dir ]]; then
+  exit 0
+fi
+
+# The cost follows the number of sessions. An earlier version read every descriptor of every process once
+# per session and ran du over the whole tree once per removal. On 2026-11-08, with 3,017 sessions, one
+# run had been going for 40 minutes and never freed anything, and the volume filled.
+#
+# Which sessions are open is read once. find matches the target text of the descriptors itself, so no
+# process is started per descriptor. A session that sudo still locks is checked with flock just before it is
+# removed, and nothing newer than the snapshot is removed before the oldest ones.
+
+open_sessions=$(mktemp)
+records=$(mktemp)
+trap 'rm -f "$open_sessions" "$records"' EXIT
+
+# Session directories that any process holds a file of, one per line. A session is DIR/AA/BB/CC.
+pattern=${dir//[\[\]*?\\]/\\&}
+find /proc/[0-9]*/fd -maxdepth 1 -lname "${pattern}/*" -printf '%l\n' 2>/dev/null \
+  | awk -v base="$dir/" 'index($0, base) == 1 { rest = substr($0, length(base) + 1); n = split(rest, p, "/"); if (n >= 3) print base p[1] "/" p[2] "/" p[3] }' \
+  | sort -u >"$open_sessions" || true
+
+declare -A held=()
+while IFS= read -r held_session; do
+  held[$held_session]=1
+done <"$open_sessions"
+
+# Oldest first: "<mtime of log> <session directory>", NUL-separated.
+find "$dir" -xdev -type f -name log -printf '%T@ %h\0' | sort -z -n >"$records"
+
+remove_session() {
+  local session=$1
+  local real candidate
+  real=$(readlink -f -- "$session")
+  case $real in
+    "$dir"/*) ;;
+    *)
+      echo "hermes-sudo-io-prune: refusing to remove ${real}" >&2
+      exit 2
+      ;;
+  esac
+  if [[ ! -d $real || ! -f $real/log ]]; then
+    return 0
+  fi
+  for candidate in "$real/log" "$real/log.json"; do
+    if [[ -f $candidate ]] && ! flock -n "$candidate" true; then
+      return 1
+    fi
+  done
+  rm -rf -- "$real"
+}
+
+now=$(date +%s)
+cutoff=$((now - retention_days * 86400))
+removed=()
+
+# Age: whole sessions older than the retention, unless something holds them.
+while IFS= read -r -d '' record; do
+  mtime=${record%% *}
+  session=${record#* }
+  if ((${mtime%.*} >= cutoff)); then
+    break
+  fi
+  if [[ -n ${held[$session]:-} ]]; then
+    continue
+  fi
+  if remove_session "$session"; then
+    removed+=("$session")
+  fi
+done <"$records"
+
+# Size: the du of the tree is read once. Each removal subtracts the du of the session it removes.
+size_kb=$(du -sk "$dir" | awk 'NR == 1 { print $1 }')
+max_kb=$((max_mb * 1024))
+if ((size_kb > max_kb)); then
+  declare -A gone=()
+  for session in "${removed[@]}"; do
+    gone[$session]=1
+  done
+  size_kb=$(du -sk "$dir" | awk 'NR == 1 { print $1 }')
+  while IFS= read -r -d '' record; do
+    if ((size_kb <= max_kb)); then
+      break
+    fi
+    session=${record#* }
+    if [[ -n ${held[$session]:-} || -n ${gone[$session]:-} ]]; then
+      continue
+    fi
+    if [[ ! -f $session/log ]]; then
+      continue
+    fi
+    session_kb=$(du -sk "$session" | awk 'NR == 1 { print $1 }')
+    if remove_session "$session"; then
+      size_kb=$((size_kb - session_kb))
+    fi
+  done <"$records"
+fi

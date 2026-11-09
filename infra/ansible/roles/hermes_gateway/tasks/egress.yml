@@ -1,0 +1,89 @@
+---
+# The local proxy that is the only way out for the service user, and the nftables hold that enforces it.
+- name: Ensure the nftables include directory exists
+  ansible.builtin.file:
+    path: /etc/nftables.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Hold the service user behind the local proxy (fail closed)
+  ansible.builtin.template:
+    src: hermes_egress.nft.j2
+    dest: /etc/nftables.d/20-hermes-egress.nft
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/nft -c -f %s
+  notify: Reload nftables
+
+- name: Install the proxy from the Ubuntu archive
+  ansible.builtin.apt:
+    name: tinyproxy
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install the proxy configuration
+  ansible.builtin.template:
+    src: tinyproxy.conf.j2
+    dest: /etc/tinyproxy/tinyproxy.conf
+    owner: root
+    group: root
+    mode: "0644"
+  register: hermes_gateway_proxy_conf
+
+- name: Install the list of allowed names
+  ansible.builtin.template:
+    src: tinyproxy-allow.filter.j2
+    dest: /etc/tinyproxy/hermes-allow.filter
+    owner: root
+    group: root
+    mode: "0644"
+  register: hermes_gateway_proxy_filter
+
+- name: Create the drop-in directory of the proxy unit
+  ansible.builtin.file:
+    path: /etc/systemd/system/tinyproxy.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Order and harden the proxy unit
+  ansible.builtin.template:
+    src: tinyproxy.service-dropin.conf.j2
+    dest: /etc/systemd/system/tinyproxy.service.d/10-hermes.conf
+    owner: root
+    group: root
+    mode: "0644"
+  register: hermes_gateway_proxy_unit
+
+- name: Create the drop-in directory of the user unit
+  ansible.builtin.file:
+    path: "{{ hermes_pins.gateway.user_dropin_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Pin the proxy of the gateway in a root-owned drop-in
+  ansible.builtin.template:
+    src: gateway-egress.conf.j2
+    dest: "{{ hermes_pins.gateway.user_dropin_dir }}/20-egress.conf"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable the proxy and apply a change to it
+  ansible.builtin.systemd_service:
+    name: tinyproxy
+    enabled: true
+    state: "{{ 'restarted' if hermes_gateway_proxy_changed else 'started' }}"
+    daemon_reload: true
+  vars:
+    hermes_gateway_proxy_changed: >-
+      {{ hermes_gateway_proxy_conf.changed or hermes_gateway_proxy_filter.changed
+         or hermes_gateway_proxy_unit.changed }}
+  when: not ansible_check_mode

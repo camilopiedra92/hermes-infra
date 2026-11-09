@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+# Replaces the bootstrap line in
+# this same file. Do not delete this path before the new file is in place:
+# hermesops is the only SSH administrator, and without this drop-in sudo
+# falls through to %sudo, which asks for a password this account does not have.
+# ignore_iolog_errors: a full I/O volume must not make sudo refuse the command.
+Defaults:{{ access_ops_user }} use_pty, log_subcmds
+Defaults:{{ access_ops_user }} log_input, log_output, ignore_iolog_errors
+Defaults:{{ access_ops_user }} iolog_dir={{ access_iolog_root }}/%{user}
+Defaults:{{ access_ops_user }} logfile={{ access_sudo_logfile }}
+{{ access_ops_user }} ALL=(ALL:ALL) NOPASSWD: ALL
+# The last matching rule wins, so this one stays below the rule above. It is the only command that receives
+# a secret, and sudo must not record what is typed to it or what it prints.
+{{ access_ops_user }} ALL=(ALL:ALL) NOPASSWD: NOLOG_INPUT: NOLOG_OUTPUT: /usr/local/sbin/hermes-secret-put
+# The owner pastes a one-time authorization code to the Claude login, and that code must not be kept either.
+{{ access_ops_user }} ALL=(ALL:ALL) NOPASSWD: NOLOG_INPUT: NOLOG_OUTPUT: /usr/local/sbin/hermes-claude-login

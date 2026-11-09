@@ -1,0 +1,6 @@
+#!/usr/sbin/nft -f
+# {{ ansible_managed }}
+# Loaded by nftables.service. Deliberately no "flush ruleset": tailscaled owns
+# its own iptables-nft tables (ip/ip6 filter, nat) and they must survive a
+# reload. This file only replaces table inet hermes_filter.
+include "/etc/nftables.d/*.nft"

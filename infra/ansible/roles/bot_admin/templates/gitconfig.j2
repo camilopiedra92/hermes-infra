@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+# System-wide, so the bot's own ~/.gitconfig stays its own. The token is not here: the helper reads
+# the file the owner delivered, and answers for github.com only.
+[credential "https://github.com"]
+	helper = /usr/local/libexec/hermes-git-credential
+[user]
+	name = Hermes bot
+	email = hermes-bot@users.noreply.github.com

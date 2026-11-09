@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+{{ access_sudo_logfile }} {
+    daily
+    rotate {{ access_logfile_rotate }}
+    maxsize {{ access_logfile_maxsize }}
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 0600 root root
+    su root root
+}

@@ -1,0 +1,5 @@
+# {{ ansible_managed }}
+# Rootless containers need these controllers delegated to the user manager on cgroup v2, so Podman can enforce
+# memory, pids and cpu limits (systemd.resource-control(5), Delegate=).
+[Service]
+Delegate=cpu cpuset io memory pids

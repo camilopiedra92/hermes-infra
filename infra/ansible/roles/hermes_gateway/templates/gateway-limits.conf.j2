@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+# Root-owned drop-in for the Hermes-generated user unit.
+# Additive only. The unit itself, its stop marker and its cgroup cleanup are Hermes' own and are not rewritten,
+# and there is deliberately no ExecStopPost here and no NoNewPrivileges: the gateway launches rootless Podman,
+# which needs the setuid newuidmap and newgidmap.
+[Unit]
+RequiresMountsFor={{ hermes_pins.state.mount }}
+
+[Service]
+MemoryHigh={{ hermes_pins.gateway.memory_high }}
+MemoryMax={{ hermes_pins.gateway.memory_max }}
+TasksMax={{ hermes_pins.gateway.tasks_max }}

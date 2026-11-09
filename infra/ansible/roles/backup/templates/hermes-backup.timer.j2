@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Daily Hermes state backup
+
+[Timer]
+OnCalendar={{ backup_on_calendar }}
+RandomizedDelaySec={{ backup_randomized_delay }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  author: cto
+  description: Host input firewall for the Hermes host
+  license: proprietary
+  min_ansible_version: "2.17"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

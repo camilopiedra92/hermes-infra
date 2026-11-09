@@ -1,0 +1,14 @@
+# {{ ansible_managed }}
+# The alias the bot's terminal backend uses. The host key is pinned in known_hosts, and a changed
+# key is refused.
+Host hermes-admin
+    HostName {{ hermes_pins.admin.host }}
+    Port {{ hermes_pins.admin.port }}
+    User {{ hermes_pins.admin.user }}
+    IdentityFile {{ hermes_pins.admin.key }}
+    IdentitiesOnly yes
+    StrictHostKeyChecking yes
+    UserKnownHostsFile {{ hermes_pins.state.mount | dirname }}/.ssh/known_hosts
+    PasswordAuthentication no
+    ServerAliveInterval 30
+    ServerAliveCountMax 4

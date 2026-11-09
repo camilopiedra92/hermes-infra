@@ -1,0 +1,17 @@
+---
+# HERMES_HOME lives on a fully reserved ext4 image, so a runaway log or state.db cannot fill
+# the root disk. It is containment, not secrecy.
+- name: Create the capped filesystem for HERMES_HOME
+  ansible.builtin.include_role:
+    name: capped_volume
+  vars:
+    capped_volume_list:
+      - label: Hermes state
+        fs_label: hermes-state
+        image: "{{ hermes_pins.state.image }}"
+        mount: "{{ hermes_pins.state.mount }}"
+        bytes: "{{ hermes_pins.state.bytes }}"
+        inodes: "{{ hermes_pins.state.inodes }}"
+        unit: "{{ hermes_pins.state.unit }}"
+        mode: "{{ hermes_pins.state.mode }}"
+        owner: "{{ hermes_pins.state.owner }}"

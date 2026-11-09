@@ -1,0 +1,10 @@
+---
+# The Hermes host, from the host itself. No SSH hop: the play runs on the machine
+# it configures, as the administrator account, with sudo. Use with `-i inventory/local.yml`.
+all:
+  children:
+    hermes:
+      hosts:
+        hermes-prod:
+          ansible_connection: local
+          ansible_become: true

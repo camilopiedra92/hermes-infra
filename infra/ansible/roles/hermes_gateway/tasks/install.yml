@@ -1,0 +1,216 @@
+---
+# Install Hermes at the pinned commit as the service user.
+#
+# Run once, with the window open and the gateway and every sandbox stopped:
+#   sudo hermes-install-window open 20
+#   ansible-playbook … site.yml --tags install
+# The window closes at the end of this file, whatever happens, and by its own timer.
+# Re-running when Hermes is already complete changes nothing and needs no window.
+
+- name: Read the installed commit
+  ansible.builtin.command:
+    argv:
+      - git
+      - -c
+      - safe.directory=*
+      - --git-dir={{ hermes_pins.install.code_dir }}/.git
+      - rev-parse
+      - HEAD
+  register: hermes_gateway_head
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Ask Hermes whether the libraries it would install on first use are there
+  ansible.builtin.command:
+    argv: "{{ hermes_gateway_as_service_user + [hermes_gateway_cli, 'doctor'] }}"
+    chdir: /
+  register: hermes_gateway_doctor_before
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: hermes_gateway_head.stdout | default('') == hermes_pins.commit
+
+- name: Decide what is left to do
+  ansible.builtin.set_fact:
+    hermes_gateway_needs_code: "{{ (hermes_gateway_head.stdout | default('')) != hermes_pins.commit }}"
+    # The libraries Hermes names as optional and not installed in its own report.
+    hermes_gateway_missing_before: >-
+      {{ hermes_pins.install.extra_libraries
+         | map('regex_replace', '$', ' (optional, not installed)')
+         | select('in', hermes_gateway_doctor_before.stdout | default(''))
+         | list }}
+
+- name: Decide whether the extras are left to do
+  ansible.builtin.set_fact:
+    hermes_gateway_needs_extras: "{{ hermes_gateway_needs_code or (hermes_gateway_missing_before | length > 0) }}"
+
+- name: Read the state of the install window
+  ansible.builtin.command: /usr/local/sbin/hermes-install-window status
+  register: hermes_gateway_window
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Require the install window to be open
+  ansible.builtin.assert:
+    that:
+      - hermes_gateway_window.stdout_lines | first | default('') == 'open'
+    fail_msg: >-
+      Hermes must be installed or completed and the install window is closed.
+      Stop the gateway and the sandbox, then run: sudo hermes-install-window open 20
+  when:
+    - not ansible_check_mode
+    - hermes_gateway_needs_code or hermes_gateway_needs_extras
+
+- name: Install and verify, and close the window whatever happens
+  block:
+    - name: Install what the installer needs from the Ubuntu archive
+      ansible.builtin.apt:
+        name:
+          - git
+          - curl
+          - ca-certificates
+          - libatomic1
+        state: present
+        update_cache: false
+
+    - name: Create the directory for the installer
+      ansible.builtin.file:
+        path: /usr/local/share/hermes
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Fetch the installer at the pinned commit and check its hash
+      ansible.builtin.get_url:
+        url: "https://raw.githubusercontent.com/NousResearch/hermes-agent/{{ hermes_pins.commit }}/scripts/install.sh"
+        dest: /usr/local/share/hermes/install.sh
+        checksum: "sha256:{{ hermes_pins.files['scripts/install.sh'] }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    # The installer replaces an empty destination with rmdir and moves its clone into place, so it needs to write the
+    # PARENT of the code directory, not the directory itself. /opt is shared and stays root's: the service user gets
+    # a parent of its own for the length of the install, and it goes back to root below.
+    - name: Give the service user the parent of the directory the code is installed into
+      ansible.builtin.file:
+        path: "{{ hermes_pins.install.code_parent }}"
+        state: directory
+        owner: "{{ hermes_pins.state.owner }}"
+        group: "{{ hermes_pins.state.owner }}"
+        mode: "0755"
+      when: hermes_gateway_needs_code
+
+    - name: Run the installer as the service user, from a clean environment
+      ansible.builtin.command:
+        argv: >-
+          {{ hermes_gateway_as_service_user
+             + ['USER=' ~ hermes_pins.state.owner, 'LOGNAME=' ~ hermes_pins.state.owner, 'LANG=C.UTF-8',
+                'HERMES_REPO_URL=' ~ hermes_pins.repo,
+                'bash', '/usr/local/share/hermes/install.sh',
+                '--commit', hermes_pins.commit, '--dir', hermes_pins.install.code_dir,
+                '--hermes-home', hermes_pins.install.hermes_home]
+             + hermes_pins.install.flags }}
+        chdir: /
+      when: hermes_gateway_needs_code
+      changed_when: true
+
+    - name: Provision the libraries Hermes would otherwise install on first use
+      ansible.builtin.command:
+        argv: "{{ hermes_gateway_as_service_user + [hermes_gateway_cli, 'pm', 'install', '--extra', item] }}"
+        chdir: /
+      loop: "{{ hermes_pins.install.extras }}"
+      when: hermes_gateway_needs_extras
+      changed_when: true
+
+    - name: Make the code owned by root, readable by everyone and writable by no one else
+      # The installer leaves the install stamp mode 0600. Once root owns it the service user could not read it
+      # and `pm doctor` would report an invalid stamp, so read access is part of the mode.
+      ansible.builtin.file:
+        path: "{{ hermes_pins.install.code_dir }}"
+        state: directory
+        recurse: true
+        owner: root
+        group: root
+        mode: "u+rwX,go+rX,go-w"
+      when: not ansible_check_mode
+
+    - name: Take the parent of the code directory back
+      ansible.builtin.file:
+        path: "{{ hermes_pins.install.code_parent }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: not ansible_check_mode
+
+    - name: Read the commit that is installed now
+      ansible.builtin.command:
+        argv:
+          - git
+          - -c
+          - safe.directory=*
+          - --git-dir={{ hermes_pins.install.code_dir }}/.git
+          - rev-parse
+          - HEAD
+      register: hermes_gateway_head_after
+      changed_when: false
+      check_mode: false
+
+    - name: Hash the files the installer trusts
+      ansible.builtin.stat:
+        path: "{{ hermes_pins.install.code_dir }}/{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - uv.lock
+        - pm/lock.json
+        - pyproject.toml
+      register: hermes_gateway_hashes
+      check_mode: false
+
+    - name: Ask Hermes to check what is installed against its lock
+      ansible.builtin.command:
+        argv: "{{ hermes_gateway_as_service_user + [hermes_gateway_cli, 'pm', 'doctor'] }}"
+        chdir: /
+      changed_when: false
+      check_mode: false
+
+    - name: Ask Hermes whether anything it would install on first use is still missing
+      ansible.builtin.command:
+        argv: "{{ hermes_gateway_as_service_user + [hermes_gateway_cli, 'doctor'] }}"
+        chdir: /
+      register: hermes_gateway_doctor_after
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: List the libraries Hermes still reports as missing
+      ansible.builtin.set_fact:
+        hermes_gateway_missing_after: >-
+          {{ hermes_pins.install.extra_libraries
+             | map('regex_replace', '$', ' (optional, not installed)')
+             | select('in', hermes_gateway_doctor_after.stdout)
+             | list }}
+      when: not ansible_check_mode
+
+    - name: Require the pinned commit, the pinned locks and a complete install
+      ansible.builtin.assert:
+        that:
+          - hermes_gateway_head_after.stdout == hermes_pins.commit
+          - hermes_gateway_hashes.results[0].stat.checksum == hermes_pins.files['uv.lock']
+          - hermes_gateway_hashes.results[1].stat.checksum == hermes_pins.files['pm/lock.json']
+          - hermes_gateway_hashes.results[2].stat.checksum == hermes_pins.files['pyproject.toml']
+          - hermes_gateway_missing_after | length == 0
+        fail_msg: Hermes is not at the pinned commit, a lock differs from the pin, or a library is missing.
+      when: not ansible_check_mode
+
+  always:
+    - name: Close the install window
+      ansible.builtin.command: /usr/local/sbin/hermes-install-window close
+      changed_when: false
+      check_mode: false
+      failed_when: false
+      when: not ansible_check_mode

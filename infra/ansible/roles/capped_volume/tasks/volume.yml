@@ -1,0 +1,263 @@
+---
+- name: Stat the image before creation for {{ capped.label }}
+  ansible.builtin.stat:
+    path: "{{ capped.image }}"
+  register: capped_volume_image_before
+  changed_when: false
+  check_mode: false
+
+- name: Record whether this run creates the image for {{ capped.label }}
+  ansible.builtin.set_fact:
+    capped_volume_image_created: >-
+      {{ not ((capped_volume_image_before.stat | default({})).exists | default(false)) }}
+  changed_when: false
+
+- name: Create the image file for {{ capped.label }}
+  ansible.builtin.command:
+    argv:
+      - install
+      - -o
+      - root
+      - -g
+      - root
+      - -m
+      - "0600"
+      - /dev/null
+      - "{{ capped.image }}"
+    creates: "{{ capped.image }}"
+
+- name: Stat the image after creation for {{ capped.label }}
+  ansible.builtin.stat:
+    path: "{{ capped.image }}"
+  register: capped_volume_image_stat
+  changed_when: false
+  check_mode: false
+
+- name: Reject an existing image that is not a regular file for {{ capped.label }}
+  ansible.builtin.assert:
+    that:
+      - (capped_volume_image_stat.stat | default({})).isreg | default(false)
+      - not ((capped_volume_image_stat.stat | default({})).islnk | default(false))
+    fail_msg: "{{ capped.image }} must be a regular file. It is not resized or formatted."
+  when: (capped_volume_image_stat.stat | default({})).exists | default(false)
+
+- name: Reject an existing image of the wrong size for {{ capped.label }}
+  ansible.builtin.assert:
+    that:
+      - (capped_volume_image_stat.stat.size | int) == (capped.bytes | int)
+    fail_msg: >-
+      {{ capped.image }} is {{ capped_volume_image_stat.stat.size | default('missing') }}
+      bytes and this role does not resize an existing image.
+  when:
+    - not (capped_volume_image_created | bool)
+    - (capped_volume_image_stat.stat | default({})).exists | default(false)
+
+- name: Allocate a new image to its ceiling for {{ capped.label }}
+  ansible.builtin.command:
+    argv:
+      - fallocate
+      - -l
+      - "{{ capped.bytes }}"
+      - "{{ capped.image }}"
+  when:
+    - not ansible_check_mode
+    - capped_volume_image_created | bool
+  changed_when: true
+
+- name: Read the filesystem type for {{ capped.label }}
+  ansible.builtin.command:
+    argv: ["blkid", "-o", "value", "-s", "TYPE", "{{ capped.image }}"]
+  register: capped_volume_image_fstype
+  changed_when: false
+  check_mode: false
+  failed_when:
+    - not (capped_volume_image_created | bool)
+    - capped_volume_image_fstype.rc != 0
+
+- name: Reject an existing image that is not ext4 for {{ capped.label }}
+  ansible.builtin.assert:
+    that:
+      - (capped_volume_image_fstype.stdout | default('') | trim) == 'ext4'
+    fail_msg: >-
+      {{ capped.image }} is not ext4
+      ({{ capped_volume_image_fstype.stdout | default('') | trim | default('unreadable', true) }}).
+      A probe failure or a foreign filesystem is not formatted.
+  when: not (capped_volume_image_created | bool)
+
+- name: Format a new image with an inode cap for {{ capped.label }}
+  ansible.builtin.command:
+    argv:
+      - mkfs.ext4
+      - -F
+      - -E
+      - nodiscard,lazy_itable_init=0,lazy_journal_init=0
+      - -L
+      - "{{ capped.fs_label }}"
+      - -m
+      - "0"
+      - -N
+      - "{{ capped.inodes }}"
+      - "{{ capped.image }}"
+  when:
+    - not ansible_check_mode
+    - capped_volume_image_created | bool
+    - (capped.inodes | string | length) > 0
+    - (capped_volume_image_fstype.stdout | default('') | trim) != 'ext4'
+  changed_when: true
+
+- name: Format a new image without an inode cap for {{ capped.label }}
+  ansible.builtin.command:
+    argv:
+      - mkfs.ext4
+      - -F
+      - -E
+      - nodiscard,lazy_itable_init=0,lazy_journal_init=0
+      - -L
+      - "{{ capped.fs_label }}"
+      - -m
+      - "0"
+      - "{{ capped.image }}"
+  when:
+    - not ansible_check_mode
+    - capped_volume_image_created | bool
+    - (capped.inodes | string | length) == 0
+    - (capped_volume_image_fstype.stdout | default('') | trim) != 'ext4'
+  changed_when: true
+
+- name: Re-read the filesystem type after format for {{ capped.label }}
+  ansible.builtin.command:
+    argv: ["blkid", "-o", "value", "-s", "TYPE", "{{ capped.image }}"]
+  register: capped_volume_image_fstype_after
+  changed_when: false
+  check_mode: false
+  failed_when: capped_volume_image_fstype_after.rc != 0
+  when:
+    - not ansible_check_mode
+    - capped_volume_image_created | bool
+
+- name: Require the new filesystem to be ext4 for {{ capped.label }}
+  ansible.builtin.assert:
+    that:
+      - (capped_volume_image_fstype_after.stdout | default('') | trim) == 'ext4'
+    fail_msg: "{{ capped.image }} did not format as ext4."
+  when:
+    - not ansible_check_mode
+    - capped_volume_image_created | bool
+
+# The reservation above and -E nodiscard keep the blocks of a new image.
+# lazy_itable_init=0 and lazy_journal_init=0 make mkfs zero the inode tables and
+# the journal itself. With lazy init the kernel does it after the mount, and on a
+# loop device that punches holes in the file again. This task reserves what is
+# still missing, for example in an image that an earlier run left sparse. The
+# next run then finds the image full and changes nothing.
+- name: Stat the image before preallocation for {{ capped.label }}
+  ansible.builtin.stat:
+    path: "{{ capped.image }}"
+  register: capped_volume_image_alloc
+  changed_when: false
+  check_mode: false
+
+- name: Preallocate an image that is sparse for {{ capped.label }}
+  ansible.builtin.command:
+    argv:
+      - fallocate
+      - -l
+      - "{{ capped.bytes }}"
+      - "{{ capped.image }}"
+  when:
+    - not ansible_check_mode
+    - (capped_volume_image_alloc.stat | default({})).exists | default(false)
+    - (capped_volume_image_alloc.stat.disk_usage_bytes | default(0) | int) < (capped.bytes | int)
+  changed_when: true
+
+- name: Keep the image root-only for {{ capped.label }}
+  ansible.builtin.file:
+    path: "{{ capped.image }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: (capped_volume_image_stat.stat | default({})).exists | default(false)
+
+- name: Read mounts before the filesystem for {{ capped.label }}
+  ansible.builtin.slurp:
+    src: /proc/mounts
+  register: capped_volume_mounts_before
+  changed_when: false
+  check_mode: false
+
+- name: Record mount state for {{ capped.label }}
+  ansible.builtin.set_fact:
+    capped_volume_image_mounted: >-
+      {{ (capped_volume_mounts_before.content | default('') | length) > 0
+         and ((' ' ~ capped.mount ~ ' ') in (capped_volume_mounts_before.content | b64decode)) }}
+  changed_when: false
+
+- name: Create an immutable mount point for {{ capped.label }}
+  ansible.builtin.file:
+    path: "{{ capped.mount }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0000"
+    attributes: "+i"
+  when: not (capped_volume_image_mounted | bool)
+
+- name: Install the mount unit for {{ capped.label }}
+  ansible.builtin.template:
+    src: capped.mount.j2
+    dest: "/etc/systemd/system/{{ capped.unit }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Stat the mount unit for {{ capped.label }}
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ capped.unit }}"
+  register: capped_volume_mount_unit
+  changed_when: false
+  check_mode: false
+
+- name: Mount the filesystem for {{ capped.label }}
+  ansible.builtin.systemd_service:
+    name: "{{ capped.unit }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: >-
+    ((capped_volume_mount_unit.stat | default({})).exists | default(false))
+    or not ansible_check_mode
+
+- name: Note that the mount unit starts on apply for {{ capped.label }}
+  ansible.builtin.debug:
+    msg: >-
+      Check mode on a first run does not start {{ capped.unit }}
+      because that unit file is not on disk yet.
+      A real apply fails if the unit is missing.
+  when:
+    - ansible_check_mode
+    - not ((capped_volume_mount_unit.stat | default({})).exists | default(false))
+
+- name: Read mounts after the filesystem for {{ capped.label }}
+  ansible.builtin.slurp:
+    src: /proc/mounts
+  register: capped_volume_mounts_after
+  changed_when: false
+  check_mode: false
+
+- name: Record the mount after the attempt for {{ capped.label }}
+  ansible.builtin.set_fact:
+    capped_volume_image_mounted: >-
+      {{ (capped_volume_mounts_after.content | default('') | length) > 0
+         and ((' ' ~ capped.mount ~ ' ') in (capped_volume_mounts_after.content | b64decode)) }}
+  changed_when: false
+
+# The mount point belongs to the owner named by the item. The parent /var/lib/hermes stays 0700,
+# so other users cannot traverse to it.
+- name: Hand ownership of the mount point to its owner for {{ capped.label }}
+  ansible.builtin.file:
+    path: "{{ capped.mount }}"
+    state: directory
+    owner: "{{ capped.owner }}"
+    group: "{{ capped.owner }}"
+    mode: "{{ capped.mode }}"
+  when: capped_volume_image_mounted | bool

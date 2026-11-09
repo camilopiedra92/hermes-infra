@@ -1,0 +1,224 @@
+---
+# Creates the account the Hermes bot administers this host with, the key it uses and the SSH
+# path to it. The path is 127.0.0.1:22 only: sshd accepts the account from that address, the key is
+# restricted to it, and nftables lets the service user connect to nothing else on port 22.
+- name: Load the Hermes pins
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../../bin/hermes/pins.json"
+    name: hermes_pins
+
+- name: Name the service user home and the key files
+  ansible.builtin.set_fact:
+    bot_admin_service_user: "{{ hermes_pins.state.owner }}"
+    bot_admin_service_home: "{{ hermes_pins.state.mount | dirname }}"
+    bot_admin_key_pub: "{{ hermes_pins.admin.key }}.pub"
+
+- name: Read the service account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ bot_admin_service_user }}"
+  failed_when: false
+  changed_when: false
+  check_mode: false
+
+- name: Require the service account and the sudo I/O directory
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['getent_passwd'][bot_admin_service_user] is defined
+      - ansible_facts['getent_passwd'][bot_admin_service_user][4] == bot_admin_service_home
+    fail_msg: >-
+      User {{ bot_admin_service_user }} must exist before its admin key is made. Run the sandbox role first.
+  when: not ansible_check_mode or (ansible_facts['getent_passwd'][bot_admin_service_user] is defined)
+
+- name: Create the administration account, with no password
+  ansible.builtin.user:
+    name: "{{ hermes_pins.admin.user }}"
+    uid: "{{ hermes_pins.admin.uid }}"
+    home: "{{ hermes_pins.admin.home }}"
+    shell: /bin/bash
+    create_home: true
+    password_lock: true
+    comment: Hermes bot administration
+    system: false
+
+- name: Install the sudo policy of the account
+  ansible.builtin.template:
+    src: 92-hermesadmin.j2
+    dest: "{{ bot_admin_sudoers_path }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+
+- name: Create the ssh directory of the service user
+  ansible.builtin.file:
+    path: "{{ bot_admin_service_home }}/.ssh"
+    state: directory
+    owner: "{{ bot_admin_service_user }}"
+    group: "{{ bot_admin_service_user }}"
+    mode: "0700"
+
+# The service user makes its own key, so the private half is never in git, in a log or on another machine.
+# It is the credential of this channel; replacing it means deleting these two files, which needs the owner's yes.
+- name: Generate the admin key of the service user, once
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ bot_admin_service_user }}"
+      - --
+      - ssh-keygen
+      - -q
+      - -t
+      - ed25519
+      - -N
+      - ""
+      - -C
+      - "{{ hermes_pins.admin.comment }}"
+      - -f
+      - "{{ hermes_pins.admin.key }}"
+    creates: "{{ hermes_pins.admin.key }}"
+
+- name: Stat the public key
+  ansible.builtin.stat:
+    path: "{{ bot_admin_key_pub }}"
+  register: bot_admin_pub_stat
+  changed_when: false
+  check_mode: false
+
+# Do not rely on the umask or on default ACLs of the home directory: state the modes.
+- name: Keep the private key readable by the service user only
+  ansible.builtin.file:
+    path: "{{ hermes_pins.admin.key }}"
+    owner: "{{ bot_admin_service_user }}"
+    group: "{{ bot_admin_service_user }}"
+    mode: "0600"
+  when: bot_admin_pub_stat.stat.exists
+
+- name: Read the public key
+  ansible.builtin.slurp:
+    src: "{{ bot_admin_key_pub }}"
+  register: bot_admin_pub
+  when: bot_admin_pub_stat.stat.exists
+  changed_when: false
+  check_mode: false
+
+- name: Read the host key of sshd
+  ansible.builtin.slurp:
+    src: /etc/ssh/ssh_host_ed25519_key.pub
+  register: bot_admin_host_key
+  changed_when: false
+  check_mode: false
+
+- name: Pin the host key for the service user
+  ansible.builtin.copy:
+    dest: "{{ bot_admin_service_home }}/.ssh/known_hosts"
+    content: "{{ hermes_pins.admin.host }} {{ (bot_admin_host_key.content | b64decode).split()[0:2] | join(' ') }}\n"
+    owner: root
+    group: "{{ bot_admin_service_user }}"
+    mode: "0644"
+
+- name: Install the ssh alias of the service user
+  ansible.builtin.template:
+    src: ssh-config.j2
+    dest: "{{ bot_admin_service_home }}/.ssh/config"
+    owner: root
+    group: "{{ bot_admin_service_user }}"
+    mode: "0644"
+
+- name: Create the ssh directory of the account
+  ansible.builtin.file:
+    path: "{{ hermes_pins.admin.home }}/.ssh"
+    state: directory
+    owner: "{{ hermes_pins.admin.user }}"
+    group: "{{ hermes_pins.admin.user }}"
+    mode: "0700"
+
+- name: Check whether the channel was closed by hand
+  ansible.builtin.stat:
+    path: "{{ bot_admin_off_file }}"
+  register: bot_admin_off
+  changed_when: false
+  check_mode: false
+
+# The key accepts the loopback address only, no forwarding and no agent. A client that is not
+# 127.0.0.1 cannot use it even if the file were copied.
+- name: Authorize the key of the service user
+  ansible.builtin.copy:
+    dest: "{{ hermes_pins.admin.home }}/.ssh/authorized_keys"
+    content: >-
+      from="{{ hermes_pins.admin.host }}",no-agent-forwarding,no-port-forwarding,no-X11-forwarding,no-user-rc
+      {{ (bot_admin_pub.content | b64decode | trim) }}
+    owner: "{{ hermes_pins.admin.user }}"
+    group: "{{ hermes_pins.admin.user }}"
+    mode: "0600"
+  when: bot_admin_pub_stat.stat.exists and not bot_admin_off.stat.exists
+
+- name: Keep the key out while the channel is closed by hand
+  ansible.builtin.file:
+    path: "{{ hermes_pins.admin.home }}/.ssh/authorized_keys"
+    state: absent
+  when: bot_admin_off.stat.exists
+
+- name: Allow the account on the loopback address
+  ansible.builtin.template:
+    src: sshd-hermesadmin.conf.j2
+    dest: "{{ bot_admin_sshd_dropin }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload sshd
+
+- name: Create the configuration directory of the account
+  ansible.builtin.file:
+    path: "{{ hermes_pins.admin.home }}/.config"
+    state: directory
+    owner: "{{ hermes_pins.admin.user }}"
+    group: "{{ hermes_pins.admin.user }}"
+    mode: "0700"
+
+# The owner delivers the GitHub token here with `sudo hermes-secret-put GITHUB_TOKEN` (0600, this account). The
+# role creates the directory and never writes the token.
+- name: Create the directory of the delivered GitHub token
+  ansible.builtin.file:
+    path: "{{ hermes_pins.admin.home }}/.config/hermes"
+    state: directory
+    owner: "{{ hermes_pins.admin.user }}"
+    group: "{{ hermes_pins.admin.user }}"
+    mode: "0700"
+
+- name: Create the directory of the git credential helper
+  ansible.builtin.file:
+    path: /usr/local/libexec
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the git credential helper
+  ansible.builtin.copy:
+    src: hermes-git-credential
+    dest: /usr/local/libexec/hermes-git-credential
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Point git at the helper for github.com
+  ansible.builtin.template:
+    src: gitconfig.j2
+    dest: /etc/gitconfig
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the channel switch
+  ansible.builtin.copy:
+    src: hermes-admin-channel
+    dest: /usr/local/sbin/hermes-admin-channel
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Reload sshd now, before anything depends on the new rule
+  ansible.builtin.meta: flush_handlers

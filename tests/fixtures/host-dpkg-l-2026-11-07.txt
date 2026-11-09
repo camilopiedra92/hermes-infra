@@ -1,0 +1,7 @@
+Desired=Unknown/Install/Remove/Purge/Hold
+| Status=Not/Inst/Conf-files/Unpacked/halF-conf/Half-inst/trig-aWait/Trig-pend
+|/ Err?=(none)/Reinst-required (Status,Err: uppercase=bad)
+||/ Name             Version                Architecture Description
++++-================-======================-============-=================================
+ii  busybox-static   1:1.36.1-6ubuntu3.1    amd64        Standalone rescue shell with rescue utilities
+ii  openssh-server   1:9.6p1-3ubuntu13.18   amd64        secure shell (SSH) server, for secure access from remote machines

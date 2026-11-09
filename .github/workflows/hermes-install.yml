@@ -1,0 +1,73 @@
+name: hermes-install
+
+# Installs Hermes as a service user at the pinned commit and checks what relies on:
+# the commit, the trusted file hashes, `hermes pm doctor`, and that Hermes writes nothing under a
+# read-only code directory. It also measures the install to size the state volume.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/hermes-install.yml"
+      - ".github/scripts/hermes-install-check.sh"
+      - "bin/hermes/**"
+      - "infra/ansible/roles/hermes_gateway/**"
+      - "infra/ansible/roles/capped_volume/**"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install:
+    name: install
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Install Ansible, with the hashes the host pipeline uses
+        run: python -m pip install --require-hashes --no-deps -r .github/requirements-ci.txt
+
+      - name: Prerequisites named by the Hermes installation guide
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends git curl ca-certificates libatomic1
+
+      - name: Install and verify, with the pins in bin/hermes/pins.json
+        run: |
+          sudo env \
+            PATH="$PATH" \
+            PINS="$PWD/bin/hermes/pins.json" \
+            REPORT="$PWD/hermes-install-report.json" \
+            .github/scripts/hermes-install-check.sh
+
+      - name: Report
+        if: always()
+        run: |
+          if [ -f hermes-install-report.json ]; then
+            {
+              echo '### Hermes install'
+              echo '```json'
+              cat hermes-install-report.json
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: hermes-install-report
+          path: |
+            hermes-install-report.json
+            hermes-install-logs/
+          if-no-files-found: ignore

@@ -1,0 +1,66 @@
+---
+- name: Install the kernel and network hardening
+  ansible.builtin.copy:
+    src: 60-hermes-hardening.conf
+    dest: /etc/sysctl.d/60-hermes-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+  register: hardening_sysctl
+
+- name: Load the hardening
+  ansible.builtin.command: sysctl --system
+  when: hardening_sysctl is changed
+  changed_when: true
+
+- name: Keep unused network protocols from loading
+  ansible.builtin.copy:
+    src: hermes-blacklist-protocols.conf
+    dest: /etc/modprobe.d/hermes-blacklist-protocols.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Restrict SSH (validated before it is installed)
+  ansible.builtin.copy:
+    src: 60-hermes-hardening-sshd.conf
+    dest: /etc/ssh/sshd_config.d/60-hermes-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  register: hardening_sshd
+
+- name: Check the effective SSH configuration before reloading
+  ansible.builtin.command: /usr/sbin/sshd -t
+  when: hardening_sshd is changed
+  changed_when: false
+
+- name: Reload SSH
+  ansible.builtin.systemd_service:
+    name: ssh
+    state: reloaded
+  when: hardening_sshd is changed
+
+- name: Install the reboot window units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - hermes-reboot-window.service
+    - hermes-reboot-window.timer
+  register: hardening_units
+
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: hardening_units is changed
+
+- name: Enable the reboot window timer
+  ansible.builtin.systemd_service:
+    name: hermes-reboot-window.timer
+    enabled: true
+    state: started

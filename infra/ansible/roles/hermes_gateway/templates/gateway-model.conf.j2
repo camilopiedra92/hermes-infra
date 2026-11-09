@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+# The model path of the gateway, root-owned so the service user cannot point it elsewhere.
+[Service]
+# The plugin looks for `claude` on PATH and in the usual install directories. Naming the binary removes the search, so
+# nothing the service user can write is ever run in its place.
+Environment="CLAUDE_SUBSCRIPTION_DIRECTSDK_COMMAND={{ hermes_gateway_claude_binary }}"
+# The CLI never updates itself (the plugin also sets this). The pin moves only after the eval suite.
+Environment="DISABLE_AUTOUPDATER=1"
+# No core dump of the gateway: its memory holds the conversation.
+LimitCORE=0

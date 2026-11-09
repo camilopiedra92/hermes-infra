@@ -1,0 +1,26 @@
+---
+argument_specs:
+  main:
+    short_description: Create fixed-size ext4 images and mount them
+    options:
+      capped_volume_list:
+        type: list
+        elements: dict
+        required: true
+        description: One entry per capped filesystem.
+        options:
+          label: {type: str, required: true}
+          fs_label: {type: str, required: true}
+          image: {type: path, required: true}
+          mount: {type: path, required: true}
+          bytes: {type: int, required: true}
+          inodes: {type: raw, required: false, default: ""}
+          unit: {type: str, required: true}
+          mode: {type: str, required: true}
+          owner: {type: str, required: true}
+      capped_volume_store:
+        type: path
+        default: /var/lib/hermes
+      capped_volume_root_margin_percent:
+        type: int
+        default: 30

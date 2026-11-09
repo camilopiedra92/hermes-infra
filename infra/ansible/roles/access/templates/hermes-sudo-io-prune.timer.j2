@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Prune closed sudo I/O sessions for {{ access_ops_user }}
+
+[Timer]
+OnCalendar=*:0/{{ access_io_prune_interval_minutes }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

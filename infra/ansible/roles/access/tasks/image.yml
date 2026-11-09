@@ -1,0 +1,174 @@
+---
+# 0700 so a local user cannot traverse to the image even if its mode is wrong.
+- name: Create the sudo I/O image directory
+  ansible.builtin.file:
+    path: "{{ access_iolog_image | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+# install(1) creates the inode mode 0600. An image that already exists is
+# mounted only when blkid positively identifies ext4 at the expected size.
+# mkfs runs only for a file this run just created, and only when that
+# create also wrote the marker. Probe output never selects mkfs.
+- name: Stat the sudo I/O image before creating one
+  ansible.builtin.stat:
+    path: "{{ access_iolog_image }}"
+  register: access_iolog_image_before
+  changed_when: false
+  check_mode: false
+
+- name: Refuse a sudo I/O image that is not a regular file of the expected size
+  ansible.builtin.assert:
+    that:
+      - access_iolog_image_before.stat.isreg | default(false)
+      - access_iolog_image_before.stat.size | int == access_iolog_bytes | int
+    fail_msg: >-
+      {{ access_iolog_image }} is not a regular file of {{ access_iolog_bytes }}
+      bytes. It will not be resized or mounted.
+  when: (access_iolog_image_before.stat | default({})).exists | default(false)
+
+- name: Require ext4 identification of the existing sudo I/O image
+  ansible.builtin.command:
+    argv:
+      - blkid
+      - -o
+      - value
+      - -s
+      - TYPE
+      - "{{ access_iolog_image }}"
+  register: access_iolog_fstype
+  changed_when: false
+  check_mode: false
+  failed_when: >-
+    access_iolog_fstype.rc != 0
+    or (access_iolog_fstype.stdout | default('') | trim) != 'ext4'
+  when: (access_iolog_image_before.stat | default({})).exists | default(false)
+
+- name: Create the sudo I/O image as root-only
+  ansible.builtin.command:
+    argv:
+      - install
+      - -o
+      - root
+      - -g
+      - root
+      - -m
+      - "0600"
+      - /dev/null
+      - "{{ access_iolog_image }}"
+    creates: "{{ access_iolog_image }}"
+  register: access_iolog_image_created
+
+- name: Extend a newly created sudo I/O image to its ceiling
+  ansible.builtin.command:
+    argv:
+      - truncate
+      - -s
+      - "{{ access_iolog_bytes }}"
+      - "{{ access_iolog_image }}"
+  when:
+    - not ansible_check_mode
+    - access_iolog_image_created is changed
+  changed_when: true
+
+- name: Mark the sudo I/O image as created this run
+  ansible.builtin.copy:
+    dest: "{{ access_iolog_image }}.new"
+    content: "created\n"
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - not ansible_check_mode
+    - access_iolog_image_created is changed
+
+- name: Stat the fresh sudo I/O marker
+  ansible.builtin.stat:
+    path: "{{ access_iolog_image }}.new"
+  register: access_iolog_new_marker
+  changed_when: false
+  check_mode: false
+
+- name: Format the sudo I/O image
+  ansible.builtin.command:
+    argv:
+      - mkfs.ext4
+      - -F
+      - -L
+      - hermes-sudo-io
+      - -m
+      - "0"
+      - "{{ access_iolog_image }}"
+  when:
+    - not ansible_check_mode
+    - access_iolog_image_created is changed
+    - (access_iolog_new_marker.stat | default({})).exists | default(false)
+  changed_when: true
+
+- name: Remove the fresh sudo I/O marker
+  ansible.builtin.file:
+    path: "{{ access_iolog_image }}.new"
+    state: absent
+  when:
+    - not ansible_check_mode
+    - access_iolog_image_created is changed
+
+- name: Stat the sudo I/O image
+  ansible.builtin.stat:
+    path: "{{ access_iolog_image }}"
+  register: access_iolog_image_stat
+  changed_when: false
+  check_mode: false
+
+- name: Enforce sudo I/O image owner and mode
+  ansible.builtin.file:
+    path: "{{ access_iolog_image }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: (access_iolog_image_stat.stat | default({})).exists | default(false)
+
+- name: Stat the sudo I/O image before mounting
+  ansible.builtin.stat:
+    path: "{{ access_iolog_image }}"
+  register: access_iolog_image_ready
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: Require ext4 identification before mounting
+  ansible.builtin.command:
+    argv:
+      - blkid
+      - -o
+      - value
+      - -s
+      - TYPE
+      - "{{ access_iolog_image }}"
+  register: access_iolog_fstype_ready
+  changed_when: false
+  check_mode: false
+  failed_when: >-
+    access_iolog_fstype_ready.rc != 0
+    or (access_iolog_fstype_ready.stdout | default('') | trim) != 'ext4'
+  when: not ansible_check_mode
+
+- name: Require the expected sudo I/O volume before mounting
+  ansible.builtin.assert:
+    that:
+      - (access_iolog_image_ready.stat | default({})).isreg | default(false)
+      - (access_iolog_image_ready.stat | default({})).size | default(0) | int == access_iolog_bytes | int
+    fail_msg: >-
+      {{ access_iolog_image }} must be a regular file of
+      {{ access_iolog_bytes }} bytes before it is mounted.
+  when: not ansible_check_mode
+
+- name: Enforce sudo I/O image owner and mode after formatting
+  ansible.builtin.file:
+    path: "{{ access_iolog_image }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: (access_iolog_image_stat.stat | default({})).exists | default(false)

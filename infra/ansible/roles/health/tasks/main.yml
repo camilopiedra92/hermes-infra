@@ -1,0 +1,49 @@
+---
+- name: Install the health collector
+  ansible.builtin.copy:
+    src: hermes-health
+    dest: /usr/local/sbin/hermes-health
+    owner: root
+    group: root
+    mode: "0750"
+    validate: python3 -m py_compile %s
+
+- name: Create the directory of the status file (world readable, written by root only)
+  ansible.builtin.file:
+    path: /var/lib/hermes-health
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the collector units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - hermes-health.service
+    - hermes-health.timer
+  register: health_units
+
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: health_units is changed
+
+- name: Enable the collector timer
+  ansible.builtin.systemd_service:
+    name: hermes-health.timer
+    enabled: true
+    state: started
+
+- name: Install the script of the Hermes cron job (runs as the service user)
+  ansible.builtin.copy:
+    src: host-health-report.py
+    dest: /home/hermes/.hermes/scripts/host-health-report.py
+    owner: hermes
+    group: hermes
+    mode: "0750"
+    validate: python3 -m py_compile %s

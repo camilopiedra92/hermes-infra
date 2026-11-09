@@ -1,0 +1,7 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Prune sudo I/O logs for {{ access_ops_user }}
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hermes-sudo-io-prune {{ access_iolog_root }}/{{ access_ops_user }} {{ access_io_retention_days }} {{ access_io_max_mb }}
