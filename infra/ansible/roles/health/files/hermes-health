@@ -43,7 +43,8 @@ def main() -> None:
     problems: list[str] = []
     info: dict[str, object] = {}
 
-    for unit in ("ssh", "tailscaled", "nftables", "tinyproxy", "auditd", "cron", *(f"tinyproxy-{name}" for name, _ in TIERS)):
+    for unit in ("ssh", "tailscaled", "nftables", "tinyproxy", "tinyproxy-ops", "auditd", "cron",
+                 *(f"tinyproxy-{name}" for name, _ in TIERS)):
         if not active(unit):
             problems.append(f"service {unit} is not active")
     for user in ("hermes", *(account for _, account in TIERS)):

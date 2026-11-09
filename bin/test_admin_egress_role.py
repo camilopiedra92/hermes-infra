@@ -58,6 +58,10 @@ class AdminEgressTests(unittest.TestCase):
         self.assertLess(tasks.index("Point the sessions"), tasks.index("Hold the administration account"))
         self.assertIn("validate: /usr/sbin/nft -c -f %s", tasks)
 
+    def test_the_health_collector_watches_the_proxy(self) -> None:
+        collector = (ROOT / "infra" / "ansible" / "roles" / "health" / "files" / "hermes-health").read_text(encoding="utf-8")
+        self.assertIn('"tinyproxy-ops"', collector)
+
     def test_the_role_has_its_own_tag_and_no_ci_job_runs_it(self) -> None:
         site = (ROOT / "infra" / "ansible" / "site.yml").read_text(encoding="utf-8")
         self.assertRegex(site, r"role: admin_egress\s+tags: \[ops_egress\]")
