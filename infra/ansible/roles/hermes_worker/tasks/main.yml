@@ -129,6 +129,7 @@
   when: not ansible_check_mode
 
 - name: Read the account of the worker
+  tags: [always]
   ansible.builtin.getent:
     database: passwd
     key: "{{ hermes_worker_user }}"
