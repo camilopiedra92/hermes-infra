@@ -9,4 +9,6 @@ ProtectSystem=strict
 ReadWritePaths=/var/lib/hermes-health
 PrivateTmp=true
 NoNewPrivileges=false
+# The drift check lists nftables tables and sockets, which is netlink (the allowed families add up with the shared sandbox).
+RestrictAddressFamilies=AF_NETLINK
 Environment=HERMES_TIERS={% for name, tier in hermes_pins.tiers.items() %}{{ name }}:{{ tier.user }}{{ "," if not loop.last }}{% endfor %}

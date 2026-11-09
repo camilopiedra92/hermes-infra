@@ -41,7 +41,8 @@ class RootServiceSandboxTests(unittest.TestCase):
         sandbox = directives(text("hardening", "templates", "service-sandbox.conf.j2"))
         for owner, unit in (("health", "hermes-health"), ("backup", "hermes-backup"), ("backup", "hermes-restore-drill")):
             own = directives(text(owner, "templates", f"{unit}.service.j2"))
-            clash = (own & sandbox) - {"SystemCallFilter", "CapabilityBoundingSet"}
+            # These lists add up with the shared sandbox, so a unit may extend them.
+            clash = (own & sandbox) - {"SystemCallFilter", "CapabilityBoundingSet", "RestrictAddressFamilies"}
             self.assertFalse(clash, f"{unit} repeats {clash}")
 
 

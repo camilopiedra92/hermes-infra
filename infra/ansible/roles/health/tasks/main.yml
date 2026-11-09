@@ -14,6 +14,22 @@
     mode: "0750"
     validate: python3 -m py_compile %s
 
+- name: Create the directory of the expected-state manifest
+  ansible.builtin.file:
+    path: /etc/hermes-health
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write the expected-state manifest
+  ansible.builtin.copy:
+    content: "{{ health_expected_state | to_nice_json }}\n"
+    dest: /etc/hermes-health/expected-state.json
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Create the directory of the status file (world readable, written by root only)
   ansible.builtin.file:
     path: /var/lib/hermes-health
