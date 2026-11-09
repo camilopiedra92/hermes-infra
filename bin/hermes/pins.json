@@ -64,6 +64,13 @@
       "admin_counter": "hermes_admin",
       "loopback_ports": "32768-60999",
       "loopback_counter": "hermes_loopback"
+    },
+    "worker": {
+      "user": "hermesworker",
+      "proxy_port": 8889,
+      "extra_domains": [
+        "api.keenable.ai"
+      ]
     }
   },
   "model": {

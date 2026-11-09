@@ -23,8 +23,13 @@ entry is rewritten, not kept as history (git has the history).
 7. **Brain outside, hands inside.** Workers use the owner's Claude subscription through the pinned plugin in their gateway;
    the login never enters a container. If a task needs the Claude CLI inside a container, use `claude setup-token` and inject
    it through an egress credential proxy, never as an environment variable of the container.
-8. **Egress control where it means something.** Gateway accounts are held by nftables to a local proxy (admin: four named
-   domains; worker: the same until mediated web access is added). Worker containers have no network device.
+8. **Egress control where it means something.** Each gateway account is held by nftables to its own local proxy that allows
+   named domains only (admin: four; worker: the same plus the search API). Separate proxies keep the worker's needs from
+   widening the admin's allowlist. Worker containers have no network device.
+8a. **Web access for the worker is mediated.** `web_search` and `web_extract` use one pinned free keyless vendor (Keenable) that
+    fetches pages itself and refuses private and internal addresses, so the worker never connects to an arbitrary host and
+    the tailnet is unreachable through it. Trade-off: queries and URLs are visible to that vendor, and the free tier is rate
+    limited. Move to a self-hosted engine only if that becomes a problem. The admin bot has no web tools.
 9. **Pin everything.** Hermes by tag and commit, the plugin by commit and manifest hash, the Claude CLI by version and
    hash, Python and Ansible by lock file, container images by digest, Actions by commit SHA.
 10. **Backups are client-side encrypted and secret-free.** restic to R2, SQLite through its backup API, restore drill monthly.

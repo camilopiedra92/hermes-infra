@@ -1,0 +1,33 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Egress proxy of the worker account (named domains only)
+After=nftables.service network.target
+Requires=nftables.service
+Before=user@{{ hermes_worker_uid }}.service
+
+[Service]
+ExecStart=/usr/bin/tinyproxy -d -c /etc/tinyproxy/tinyproxy-worker.conf
+ExecReload=/bin/kill -USR1 $MAINPID
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=20
+PrivateDevices=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK
+ReadWritePaths=/run/tinyproxy-worker
+RuntimeDirectory=tinyproxy-worker
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_CHOWN
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

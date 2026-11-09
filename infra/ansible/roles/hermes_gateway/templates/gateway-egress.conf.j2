@@ -1,8 +1,6 @@
 # {{ ansible_managed }}
-# Everything the gateway sends goes to the local proxy, which allows named domains only. The uid has no
-# route and no DNS of its own. HTTPS only: nothing the service needs is plain HTTP, so HTTP_PROXY is not set. Root-owned, so the service user cannot point it elsewhere.
+# The proxy variables come from the root-owned environment generator (egress-proxy-generator), one proxy per account.
+# HTTPS only: nothing the services need is plain HTTP, so HTTP_PROXY is not set.
 [Service]
-Environment="HTTPS_PROXY=http://{{ hermes_pins.egress.nft.proxy_address }}:{{ hermes_pins.egress.nft.proxy_port }}"
-Environment="NO_PROXY=localhost,127.0.0.1,::1"
 # Claude's own updater, telemetry and error reporting would name hosts the allowlist does not.
 Environment="CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1"

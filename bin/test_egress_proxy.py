@@ -122,16 +122,49 @@ class UnitAndEnvironmentTests(unittest.TestCase):
         families = [x for x in directives(render_dropin()) if x.startswith("RestrictAddressFamilies=")]
         self.assertEqual(families, ["RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK"])
 
-    def test_the_gateway_sends_everything_to_the_proxy_from_a_root_owned_drop_in(self) -> None:
+    def test_the_unit_dropin_holds_no_proxy_so_the_account_generator_decides(self) -> None:
         env = render_gateway_env()
-        url = f"http://{G2['nft']['proxy_address']}:{G2['nft']['proxy_port']}"
-        self.assertIn(f'"HTTPS_PROXY={url}"', env)
         names = [x.split("=", 1)[0].removeprefix("Environment=").strip('"') for x in directives(env) if x.startswith("Environment=")]
+        self.assertNotIn("HTTPS_PROXY", names)
         self.assertNotIn("HTTP_PROXY", names, "nothing needs plain HTTP, and the proxy forwards it to port 80")
-        self.assertIn("NO_PROXY=localhost,127.0.0.1,::1", env)
         self.assertIn("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", env)
-        block = TASKS[TASKS.index("Pin the proxy of the gateway") :]
+
+    def test_each_account_gets_its_own_proxy_from_a_root_owned_generator(self) -> None:
+        import os
+        import subprocess
+        import tempfile
+
+        worker = HERMES["egress"]["worker"]
+        script = _fill(template("egress-proxy-generator.j2")).replace(
+            "{{ hermes_pins.egress.user.name }}", HERMES["egress"]["user"]["name"]
+        ).replace("{{ hermes_pins.egress.worker.user }}", worker["user"]).replace(
+            "{{ hermes_pins.egress.worker.proxy_port }}", str(worker["proxy_port"])
+        )
+        expected = {
+            HERMES["egress"]["user"]["name"]: HERMES["egress"]["nft"]["proxy_port"],
+            worker["user"]: worker["proxy_port"],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            for account, port in {**expected, "someone": None}.items():
+                fake = Path(tmp) / "id"
+                fake.write_text(f"#!/bin/sh\necho {account}\n", encoding="utf-8")
+                fake.chmod(0o755)
+                out = subprocess.run(
+                    ["/bin/sh", "-c", script], env={"PATH": f"{tmp}:/usr/bin:/bin"}, capture_output=True, text=True, check=True
+                ).stdout
+                if port is None:
+                    self.assertEqual(out, "", "an unknown account gets no proxy variables")
+                else:
+                    self.assertIn(f"HTTPS_PROXY=http://127.0.0.1:{port}", out)
+                    self.assertIn("NO_PROXY=localhost,127.0.0.1,::1", out)
+        self.assertNotEqual(worker["proxy_port"], HERMES["egress"]["nft"]["proxy_port"])
+        block = TASKS[TASKS.index("Point each account at its own proxy") :]
         self.assertIn("owner: root", block)
+
+    def test_the_worker_may_reach_the_admin_names_plus_only_the_search_api(self) -> None:
+        self.assertEqual(HERMES["egress"]["worker"]["extra_domains"], ["api.keenable.ai"])
+        proxy = (ROOT / "infra" / "ansible" / "roles" / "hermes_worker" / "templates" / "tinyproxy-worker-allow.filter.j2").read_text(encoding="utf-8")
+        self.assertIn("hermes_pins.egress.domains + hermes_pins.egress.worker.extra_domains", proxy)
 
     def test_telegram_has_its_own_explicit_proxy_in_the_managed_environment(self) -> None:
         env = _fill(template("managed.env.j2"))
