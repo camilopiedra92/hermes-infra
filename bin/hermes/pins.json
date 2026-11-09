@@ -119,7 +119,7 @@
         "oauth2.googleapis.com"
       ],
       "sandbox": true,
-      "state_bytes": 3221225472,
+      "state_bytes": 2147483648,
       "state_inodes": 131072,
       "slice_memory_max": "2G",
       "toolsets": [
