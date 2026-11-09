@@ -1,6 +1,6 @@
 # {{ ansible_managed }}
 # Hermes managed scope for the {{ hermes_tier_name }} tier (docs/ARCHITECTURE.md). Owned by root in /etc/hermes-{{ hermes_tier_name }}.
-# This tier reads untrusted content and holds no host or cloud credential{{ ': its tools run in a rootless container, never on the host' if hermes_tier_sandbox else '; it has no shell and no file tools' }}.
+# This tier reads untrusted content and holds no host or cloud credential{{ ': its tools run in a rootless container, never on the host' if hermes_tier_sandbox else '; it has no shell and its file writes stay in one workspace folder' }}.
 
 security:
   allow_lazy_installs: false

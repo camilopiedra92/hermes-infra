@@ -28,13 +28,14 @@ the powerful credentials, and the agent that holds them never reads untrusted co
 | --- | --- | --- | --- |
 | 0 | Admin agent (the Hermes gateway, owner-only Telegram) | owner messages, trusted tools | root through audited sudo, cloud tokens, approvals manual |
 | 1 | Worker agents (own account and Hermes instance) | web, public repos, any text | rootless container only; no host or cloud credential; scoped GitHub token for scratch repositories |
-| 2 | Personal assistant (own account and Hermes instance) | web, calendar and task text | owner's Calendar and Todoist through remote MCP (OAuth); no shell, no files, no host or cloud credential; every write asks the owner |
+| 2 | Personal assistant (own account and Hermes instance) | web, calendar and task text | owner's Calendar and Todoist through remote MCP (OAuth); no shell, writes only in its workspace, no host or cloud credential; every MCP write asks the owner |
 | - | Break-glass | owner | Hetzner console, Tailscale from the owner's phone |
 
 Worker output (pull requests, files) is untrusted data for tier 0. A worker never merges, never applies.
 
 Tier 2 holds personal data and reads the web, which is the combination an injected instruction needs to do harm. Its
-containment is capability, not a sandbox: no terminal, no file tools, no code execution, MCP servers marked
+containment is capability, not a sandbox: no terminal, no code execution, file writes confined to one workspace
+folder (`HERMES_WRITE_SAFE_ROOT`; Hermes also denies its secret stores), MCP servers marked
 `trust: untrusted` (every write needs the owner's approval; an unattended cron run cannot approve, so it can only read),
 and a proxy that names only the hosts of its MCP servers and its search vendor.
 

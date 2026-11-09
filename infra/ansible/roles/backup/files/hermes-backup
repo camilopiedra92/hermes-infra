@@ -23,7 +23,7 @@ STATUS = WORK / "status.json"
 WARN_BYTES = 7_000_000_000  # the R2 free tier is 10 GB
 KEEP = ["--keep-daily", "14", "--keep-weekly", "8", "--keep-monthly", "6"]
 INCLUDE = ["memories", "skills", "cron", "sessions", "scripts", "hooks", "pairing", "platforms", "state",
-           "kanban", "config.yaml", "SOUL.md", "channel_directory.json", "logs"]
+           "kanban", "config.yaml", "SOUL.md", "channel_directory.json", "logs", "workspace"]
 EXCLUDE = ["*.lock", "*.sock", "*.pid", ".env", "auth.json"]
 
 

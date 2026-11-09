@@ -127,6 +127,7 @@
         "clarify",
         "memory",
         "session_search",
+        "file",
         "skills",
         "cronjob",
         "mcp-todoist",
@@ -134,7 +135,6 @@
       ],
       "disabled_toolsets": [
         "terminal",
-        "file",
         "code_execution",
         "browser",
         "delegation",
@@ -155,7 +155,8 @@
           "url": "https://calendarmcp.googleapis.com/mcp/v1",
           "oauth_client": true
         }
-      }
+      },
+      "write_safe_root": "workspace"
     }
   },
   "model": {

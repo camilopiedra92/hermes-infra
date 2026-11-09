@@ -156,6 +156,9 @@
       HERMES_DOCKER_BINARY=/usr/bin/podman
       {% endif %}
       HERMES_TELEGRAM_DISABLE_FALLBACK_IPS=true
+      {% if hermes_tier_def.write_safe_root is defined %}
+      HERMES_WRITE_SAFE_ROOT={{ hermes_tier_hermes_home }}/{{ hermes_tier_def.write_safe_root }}
+      {% endif %}
       {{ (hermes_tier_admin_env.content | b64decode).splitlines()
          | select('match', '^TELEGRAM_ALLOWED_USERS=') | first }}
     dest: "{{ hermes_tier_managed_dir }}/.env"
@@ -179,6 +182,17 @@
     group: "{{ hermes_tier_user }}"
     mode: "0700"
   when: hermes_tier_sandbox
+
+# Where a tier without a sandbox may write (reports, notes, exports). Hermes denies every write outside this root and
+# every write to its own secret stores, so the file tools cannot reach a token or the policy.
+- name: Create the workspace of the tier
+  ansible.builtin.file:
+    path: "{{ hermes_tier_hermes_home }}/{{ hermes_tier_def.write_safe_root }}"
+    state: directory
+    owner: "{{ hermes_tier_user }}"
+    group: "{{ hermes_tier_user }}"
+    mode: "0700"
+  when: hermes_tier_def.write_safe_root is defined
 
 - name: Read whether the model plugin is installed
   ansible.builtin.command:

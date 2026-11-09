@@ -65,7 +65,10 @@ class TierDefinitionTests(unittest.TestCase):
                     self.assertIn(key, tier, name)
             else:
                 self.assertNotIn("terminal", tier["toolsets"], f"{name}: a tier without a sandbox has no shell")
-                self.assertNotIn("file", tier["toolsets"], name)
+                if "file" in tier["toolsets"]:
+                    self.assertIn("write_safe_root", tier, f"{name}: file tools need a confined write root")
+                    self.assertFalse(tier["write_safe_root"].startswith("/"), name)
+                    self.assertNotIn("..", tier["write_safe_root"], name)
 
     def test_the_unit_name_of_each_state_mount_is_what_systemd_derives_from_the_path(self) -> None:
         import shutil
