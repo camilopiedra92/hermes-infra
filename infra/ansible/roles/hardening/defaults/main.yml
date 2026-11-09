@@ -1,2 +1,22 @@
 ---
 hardening_reboot_calendar: "Sun *-*-* 10:30:00 UTC"   # inside 05:00-07:00 America/Bogota (10:00-12:00 UTC)
+
+# Root services that get the common sandbox as a drop-in. Each unit belongs to another role.
+hardening_sandboxed_services:
+  - hermes-health
+  - hermes-backup
+  - hermes-restore-drill
+
+# Packages of the stock cloud image that this server never uses. Each one is a daemon, a socket or a network client that
+# nothing needs: no snaps, no iSCSI or multipath storage, no hypervisor agent, no crash uploader, no entropy fetch.
+hardening_purged_packages:
+  - snapd
+  - lxd-installer
+  - open-iscsi
+  - multipath-tools
+  - open-vm-tools
+  - apport
+  - apport-symptoms
+  - apport-core-dump-handler
+  - pollinate
+  - motd-news-config

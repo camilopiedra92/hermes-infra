@@ -1,0 +1,22 @@
+# {{ ansible_managed }}
+# Common sandbox of the Hermes root services (the collector, the backup and its drill). They read and report; none of them
+# loads modules, sets the clock, reboots, or needs devices, namespaces or a writable kernel interface.
+[Service]
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+PrivateDevices=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@mount @debug @module @reboot @swap @obsolete @raw-io @cpu-emulation
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=~CAP_SYS_MODULE CAP_SYS_TIME CAP_SYS_BOOT CAP_SYS_PACCT CAP_SYS_TTY_CONFIG CAP_SYS_RAWIO
+CapabilityBoundingSet=~CAP_BPF CAP_LINUX_IMMUTABLE CAP_WAKE_ALARM CAP_MKNOD CAP_SYSLOG
+UMask=0077
