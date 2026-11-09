@@ -149,7 +149,17 @@
       "mcp_servers": {
         "todoist": {
           "url": "https://ai.todoist.net/mcp",
-          "oauth_client": false
+          "oauth_client": false,
+          "exclude": [
+            "delete-object",
+            "project-management",
+            "project-move",
+            "manage-assignments",
+            "export-project-template",
+            "import-project-template",
+            "search",
+            "fetch"
+          ]
         },
         "google_calendar": {
           "url": "https://calendarmcp.googleapis.com/mcp/v1",

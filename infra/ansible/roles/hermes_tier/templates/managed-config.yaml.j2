@@ -53,7 +53,7 @@ terminal:
 {% endif %}
 {% if hermes_tier_def.mcp_servers is defined %}
 
-# Remote MCP servers over OAuth. The tokens stay in the tier's own home (mode 600) and never leave it. Every write a tool
+# Remote MCP servers over OAuth. Tools that destroy or move data, and the connector duplicates, are not registered at all. The tokens stay in the tier's own home (mode 600) and never leave it. Every write a tool
 # makes asks the owner first (trust: untrusted); a cron run cannot ask, so it can only read. A Google OAuth client is the
 # owner's own, kept in the tier's .env and referenced here, so nothing secret is in this world-readable file.
 mcp_servers:
@@ -62,6 +62,13 @@ mcp_servers:
     url: {{ server.url }}
     auth: oauth
     trust: untrusted
+{% if server.exclude is defined %}
+    tools:
+      exclude:
+{% for tool in server.exclude %}
+        - {{ tool }}
+{% endfor %}
+{% endif %}
 {% if server.oauth_client %}
     oauth:
       client_id: "${GOOGLE_OAUTH_CLIENT_ID}"

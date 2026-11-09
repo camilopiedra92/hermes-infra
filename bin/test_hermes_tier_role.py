@@ -107,6 +107,13 @@ class TierDefinitionTests(unittest.TestCase):
         self.assertIn("trust: untrusted", template)
         self.assertNotIn("client_secret: \"", template.replace('"${GOOGLE_OAUTH_CLIENT_SECRET}"', ""))
 
+    def test_the_assistant_cannot_delete_or_move_the_owners_tasks(self) -> None:
+        excluded = PINS["tiers"]["assistant"]["mcp_servers"]["todoist"]["exclude"]
+        for tool in ("delete-object", "project-move", "project-management"):
+            self.assertIn(tool, excluded)
+        template = (ROLE / "templates" / "managed-config.yaml.j2").read_text(encoding="utf-8")
+        self.assertIn("server.exclude", template)
+
 
 if __name__ == "__main__":
     unittest.main()

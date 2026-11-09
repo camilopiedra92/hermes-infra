@@ -64,3 +64,5 @@ entry is rewritten, not kept as history (git has the history).
     server, so each write asks the owner and a cron run is read-only. Google's Calendar server needs the owner's own OAuth client
     (it refuses dynamic registration); its id and secret live in the tier's `.env`, never in the policy. Publish that OAuth app
     "In production": in "Testing" Google expires refresh tokens after seven days.
+    Tools that delete or move data are excluded per server (`tools.exclude`, from `mcp_servers.<name>.exclude` in the pins), so
+    even an approved prompt cannot destroy the owner's data; the owner can ask to enable one.
