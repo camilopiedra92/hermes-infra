@@ -60,9 +60,14 @@
 
 	"tests": [
 		{
-			"src":    "camilopiedra92@gmail.com",
-			"accept": ["tag:hermes-prod:22", "tag:hermes-prod:443", "tag:hermes-prod:8443", "tag:hermes-prod:8444"],
-			"deny":   ["tag:hermes-prod:80", "tag:hermes-prod:8080", "tag:hermes-ops:22"],
+			"src": "camilopiedra92@gmail.com",
+			"accept": [
+				"tag:hermes-prod:22",
+				"tag:hermes-prod:443",
+				"tag:hermes-prod:8443",
+				"tag:hermes-prod:8444",
+			],
+			"deny": ["tag:hermes-prod:80", "tag:hermes-prod:8080", "tag:hermes-ops:22"],
 		},
 		{
 			"src":    "tag:hermes-ops",
