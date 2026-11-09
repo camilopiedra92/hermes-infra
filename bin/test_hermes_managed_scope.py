@@ -48,18 +48,13 @@ class ManagedConfigTests(unittest.TestCase):
         self.assertIs(CONFIG["skills"]["guard_agent_created"], True)
         self.assertIs(CONFIG["skills"]["write_approval"], False)  # the owner wants the bot to learn by itself; revisit with untrusted inputs
 
-    def test_commands_run_as_the_administrator_account_over_loopback_ssh_and_never_locally(self) -> None:
-        admin = PINS["admin"]
+    def test_commands_run_locally_as_the_account_of_the_bot_and_root_comes_from_sudo(self) -> None:
         terminal = CONFIG["terminal"]
-        self.assertEqual(terminal["backend"], "ssh")
-        self.assertEqual(terminal["ssh_user"], admin["user"])
-        self.assertEqual(terminal["ssh_key"], admin["key"])
-        self.assertEqual(terminal["ssh_port"], admin["port"])
-        self.assertEqual(terminal["cwd"], admin["home"])
-        # The alias resolves to the pinned address and pins the host key (role bot_admin, templates/ssh-config.j2).
-        self.assertEqual(terminal["ssh_host"], "hermes-admin")
-        alias = (ROOT / "infra/ansible/roles/bot_admin/templates/ssh-config.j2").read_text(encoding="utf-8")
-        self.assertIn("Host " + terminal["ssh_host"], alias)
+        self.assertEqual(terminal["backend"], "local")
+        self.assertEqual(terminal["cwd"], PINS["state"]["mount"].rsplit("/", 1)[0])
+        self.assertFalse([key for key in terminal if key.startswith("ssh_")], "no SSH hop: the bot is its own operator")
+        sudoers = (ROOT / "infra/ansible/roles/operator/templates/92-hermes-operator.j2").read_text(encoding="utf-8")
+        self.assertIn("NOPASSWD: ALL", sudoers)
 
     def test_approvals_are_manual_and_never_loosened(self) -> None:
         # Values only: the comments say "never yolo" and are allowed to.

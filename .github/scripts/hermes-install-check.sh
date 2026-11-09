@@ -186,7 +186,7 @@ print(model, resolve_reasoning_config(cfg)['effort'], get_model_context_length(m
 echo "resolved (model, effort, context): $RESOLVED"
 [ "$RESOLVED" = "$(pin '["model"]["default_model"]') $(pin '["model"]["reasoning_effort"]') 1000000" ] || fail "the resolved default model, effort or context is not the one the owner chose"
 for change in "model.provider openrouter" "model.default claude-opus-5-5" "auth.adopt_external_logins true" "updates.check true" "plugins.auto_apply true" \
-  "terminal.backend local" "terminal.ssh_user root" "terminal.ssh_key /tmp/other" "approvals.mode off" "approvals.timeout 99999"; do
+  "terminal.backend docker" "terminal.cwd /tmp" "approvals.mode off" "approvals.timeout 99999"; do
   # shellcheck disable=SC2086
   if OUT=$(run_hermes config set $change 2>&1); then echo "$OUT"; fail "the service user changed a pinned key: $change"; fi
   printf '%s\n' "$OUT" | grep -qi "managed by your administrator" || { echo "$OUT"; fail "no 'managed' refusal for: $change"; }
