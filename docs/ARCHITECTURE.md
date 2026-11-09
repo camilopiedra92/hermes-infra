@@ -47,6 +47,12 @@ and a proxy that names only the hosts of its MCP servers and its search vendor.
 - Policy that the service user cannot change lives in `/etc/hermes/config.yaml` (Hermes managed scope).
 - Hardening follows CIS-style defaults for Ubuntu: kernel parameters, SSH limits, unattended security upgrades,
   reboots only in the maintenance window (Sunday 05:00-07:00 America/Bogota).
+- Attack surface is removed, not masked: the stock cloud image's snapd, iSCSI, multipath, hypervisor agent, crash uploader and
+  entropy fetch are purged, and the container auto-update timer is masked (images are pinned and loaded by the role).
+- Root services (collector, backup, restore drill) share one systemd sandbox (no module, clock, reboot, device or namespace
+  access). The admin backend runs without privilege escalation. The sandbox tiers cannot: rootless Podman needs the setuid
+  `newuidmap`, and in a user manager every namespace or seccomp option implies `NoNewPrivileges`. For them the container
+  and the unprivileged account are the boundary, and the gateway drop-in is shared by all tiers, so it stays additive.
 
 ## Sandbox (tier 1)
 

@@ -43,3 +43,42 @@
     name: hermes-reboot-window.timer
     enabled: true
     state: started
+
+- name: Create the drop-in directories of the sandboxed services
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ hardening_sandboxed_services }}"
+
+- name: Sandbox the Hermes root services
+  ansible.builtin.template:
+    src: service-sandbox.conf.j2
+    dest: "/etc/systemd/system/{{ item }}.service.d/50-sandbox.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ hardening_sandboxed_services }}"
+  notify: Reload systemd
+
+- name: Remove the services of the cloud image that this server does not use
+  ansible.builtin.apt:
+    name: "{{ hardening_purged_packages }}"
+    state: absent
+    purge: true
+    autoremove: true
+
+# The runtime of rootless containers depends on neither the timer nor the restart service: the images are pinned and
+# loaded by the role, and a container is started by the agent that needs it.
+- name: Stop the automatic update and restart of containers
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: false
+    masked: true
+    state: stopped
+  loop:
+    - podman-auto-update.timer
+    - podman-auto-update.service
+    - podman-restart.service

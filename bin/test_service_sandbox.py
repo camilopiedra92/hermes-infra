@@ -1,0 +1,83 @@
+"""Service sandboxing: root services share one sandbox; the admin backend drops privilege escalation; sandbox tiers cannot."""
+
+from __future__ import annotations
+
+import re
+import unittest
+from pathlib import Path
+
+ROLES = Path(__file__).resolve().parent.parent / "infra" / "ansible" / "roles"
+
+
+def text(*parts: str) -> str:
+    return ROLES.joinpath(*parts).read_text(encoding="utf-8")
+
+
+def directives(content: str) -> set[str]:
+    return {line.split("=", 1)[0] for line in content.splitlines() if "=" in line and not line.startswith(("#", "Environment"))}
+
+
+class RootServiceSandboxTests(unittest.TestCase):
+    def test_the_common_sandbox_denies_the_dangerous_interfaces(self) -> None:
+        sandbox = text("hardening", "templates", "service-sandbox.conf.j2")
+        for line in (
+            "ProtectKernelModules=true", "ProtectClock=true", "PrivateDevices=true", "MemoryDenyWriteExecute=true",
+            "RestrictNamespaces=true", "SystemCallArchitectures=native", "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+        ):
+            self.assertIn(line, sandbox)
+        self.assertIn("CAP_SYS_MODULE", sandbox)
+        self.assertIn("CAP_SYS_BOOT", sandbox)
+
+    def test_every_root_collector_and_backup_unit_gets_it(self) -> None:
+        listed = set(re.findall(r"^\s+- (hermes-[\w-]+)$", text("hardening", "defaults", "main.yml"), re.M))
+        self.assertEqual(listed, {"hermes-health", "hermes-backup", "hermes-restore-drill"})
+        tasks = text("hardening", "tasks", "main.yml")
+        self.assertIn("50-sandbox.conf", tasks)
+        for unit in listed:
+            owner = "health" if unit == "hermes-health" else "backup"
+            self.assertTrue((ROLES / owner / "templates" / f"{unit}.service.j2").exists(), unit)
+
+    def test_no_unit_asks_for_what_the_sandbox_removes(self) -> None:
+        sandbox = directives(text("hardening", "templates", "service-sandbox.conf.j2"))
+        for owner, unit in (("health", "hermes-health"), ("backup", "hermes-backup"), ("backup", "hermes-restore-drill")):
+            own = directives(text(owner, "templates", f"{unit}.service.j2"))
+            clash = (own & sandbox) - {"SystemCallFilter", "CapabilityBoundingSet"}
+            self.assertFalse(clash, f"{unit} repeats {clash}")
+
+
+class AttackSurfaceTests(unittest.TestCase):
+    def test_unused_image_services_are_purged_and_container_auto_update_is_masked(self) -> None:
+        defaults = text("hardening", "defaults", "main.yml")
+        for package in ("snapd", "open-iscsi", "multipath-tools", "open-vm-tools", "apport", "pollinate", "lxd-installer"):
+            self.assertRegex(defaults, rf"^\s+- {package}$", package)
+        tasks = text("hardening", "tasks", "main.yml")
+        self.assertIn("purge: true", tasks)
+        for unit in ("podman-auto-update.timer", "podman-restart.service"):
+            self.assertIn(unit, tasks)
+        self.assertIn("kernel.core_pattern = |/bin/false", text("hardening", "files", "60-hermes-hardening.conf"))
+
+    def test_the_reboot_flag_package_stays(self) -> None:
+        # update-notifier-common writes /run/reboot-required, which the health collector and the reboot window read.
+        self.assertNotIn("update-notifier-common", text("hardening", "defaults", "main.yml"))
+
+
+class UserUnitSandboxTests(unittest.TestCase):
+    def test_the_admin_backend_runs_without_privilege_escalation(self) -> None:
+        unit = text("hermes_gateway", "templates", "hermes-serve.service.j2")
+        for line in ("NoNewPrivileges=true", "ProtectSystem=strict", "PrivateTmp=true", "RestrictNamespaces=true"):
+            self.assertIn(line, unit)
+
+    def test_units_that_launch_rootless_podman_never_set_no_new_privileges(self) -> None:
+        # Podman needs the setuid newuidmap. The drop-in of the gateway is shared by every tier, so it cannot carry it either.
+        for owner, name in (("hermes_tier", "hermes-tier-serve.service.j2"), ("hermes_gateway", "gateway-limits.conf.j2")):
+            self.assertNotIn("NoNewPrivileges=", "\n".join(
+                line for line in text(owner, "templates", name).splitlines() if not line.startswith("#")))
+
+    def test_capability_dropping_options_stay_out_of_user_units(self) -> None:
+        unit = text("hermes_gateway", "templates", "hermes-serve.service.j2")
+        for option in ("PrivateDevices", "ProtectClock", "ProtectKernelModules", "ProtectKernelLogs", "CapabilityBoundingSet"):
+            self.assertNotRegex(unit, rf"^{option}=", f"{option} fails in an unprivileged user manager")
+
+
+if __name__ == "__main__":
+    unittest.main()
