@@ -118,23 +118,23 @@
         "accounts.google.com",
         "oauth2.googleapis.com"
       ],
-      "sandbox": false,
-      "state_bytes": 2147483648,
+      "sandbox": true,
+      "state_bytes": 3221225472,
       "state_inodes": 131072,
-      "slice_memory_max": "1G",
+      "slice_memory_max": "2G",
       "toolsets": [
         "web",
         "clarify",
         "memory",
         "session_search",
+        "terminal",
+        "file",
         "skills",
         "cronjob",
         "mcp-todoist",
         "mcp-google_calendar"
       ],
       "disabled_toolsets": [
-        "terminal",
-        "file",
         "code_execution",
         "browser",
         "delegation",
@@ -155,7 +155,11 @@
           "url": "https://calendarmcp.googleapis.com/mcp/v1",
           "oauth_client": true
         }
-      }
+      },
+      "subid_start": 362144,
+      "subid_count": 65536,
+      "containers_bytes": 3221225472,
+      "containers_inodes": 196608
     }
   },
   "model": {

@@ -58,7 +58,9 @@ entry is rewritten, not kept as history (git has the history).
 18. **The personal assistant is its own tier.** It combines three things no other agent may hold together: the owner's personal data
     (Google Calendar, Todoist), untrusted input (web search) and write capability. It therefore has its own Linux account, state
     volume, policy and proxy (tier 2). Its hands are vendor-hosted remote MCP servers over OAuth 2.1 (Todoist, Google Calendar), so
-    no local code or credential-handling is carried. Least privilege: no shell, no file tools, `trust: untrusted` on every
+    no local code or credential-handling is carried. Least privilege: its terminal and file tools run only in the rootless container, never on the host (the host account also holds its
+    Claude login and process environment, and Hermes denies reading only its own stores, so a host file tool could be told
+    to read and leak them), `trust: untrusted` on every
     server, so each write asks the owner and a cron run is read-only. Google's Calendar server needs the owner's own OAuth client
     (it refuses dynamic registration); its id and secret live in the tier's `.env`, never in the policy. Publish that OAuth app
     "In production": in "Testing" Google expires refresh tokens after seven days.
