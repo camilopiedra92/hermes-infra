@@ -2,9 +2,9 @@
 # {{ ansible_managed }}
 # Egress hold of the admin gateway account (uid {{ hermes_pins.egress.user.uid }}). Fail closed: this file loads at boot, before the
 # user manager exists, and the gateway unit orders itself after it.
-# The uid may reach only the local proxy that allows named domains, the ephemeral loopback range where the model plugin
-# binds its relay, and sshd on 127.0.0.1:22 (the loopback path of the administrator account, docs/ARCHITECTURE.md).
-# Everything else is dropped and counted. There is no DNS for the uid: the proxy resolves.
+# The uid may reach only the local proxy that allows named domains and the loopback interface (the model plugin binds a
+# relay there, and the commands of the admin bot talk to local services). Everything else is dropped and counted. There is
+# no DNS for the uid: the proxy resolves.
 # {{ hermes_pins.egress.nft.window_chain }} is empty here. hermes-install-window fills it for a bounded time to let the
 # installer reach the network, and a reload of this file empties it.
 
@@ -14,7 +14,6 @@ delete table inet {{ hermes_pins.egress.nft.table }}
 table inet {{ hermes_pins.egress.nft.table }} {
   counter {{ hermes_pins.egress.nft.hold_counter }} {}
   counter {{ hermes_pins.egress.nft.proxy_counter }} {}
-  counter {{ hermes_pins.egress.nft.admin_counter }} {}
   counter {{ hermes_pins.egress.nft.loopback_counter }} {}
 
   chain {{ hermes_pins.egress.nft.window_chain }} {
@@ -25,8 +24,7 @@ table inet {{ hermes_pins.egress.nft.table }} {
 
     meta skuid {{ hermes_pins.egress.user.uid }} jump {{ hermes_pins.egress.nft.window_chain }}
     meta skuid {{ hermes_pins.egress.user.uid }} oifname "lo" ip daddr {{ hermes_pins.egress.nft.proxy_address }} tcp dport {{ hermes_pins.egress.nft.proxy_port }} counter name "{{ hermes_pins.egress.nft.proxy_counter }}" accept
-    meta skuid {{ hermes_pins.egress.user.uid }} oifname "lo" ip daddr {{ hermes_pins.egress.nft.proxy_address }} tcp dport {{ hermes_pins.egress.nft.admin_port }} counter name "{{ hermes_pins.egress.nft.admin_counter }}" accept
-    meta skuid {{ hermes_pins.egress.user.uid }} oifname "lo" ip daddr {{ hermes_pins.egress.nft.proxy_address }} tcp dport {{ hermes_pins.egress.nft.loopback_ports }} counter name "{{ hermes_pins.egress.nft.loopback_counter }}" accept
+    meta skuid {{ hermes_pins.egress.user.uid }} oifname "lo" counter name "{{ hermes_pins.egress.nft.loopback_counter }}" accept
     meta skuid {{ hermes_pins.egress.user.uid }} counter name "{{ hermes_pins.egress.nft.hold_counter }}" drop
   }
 }

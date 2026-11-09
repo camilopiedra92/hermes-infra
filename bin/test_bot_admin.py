@@ -38,9 +38,6 @@ class PinTests(unittest.TestCase):
         self.assertNotIn(ADMIN["uid"], (1000, PINS["state"].get("uid", 1001), 1001))
         self.assertEqual(ADMIN["host"], "127.0.0.1")
 
-    def test_the_firewall_opens_exactly_the_port_of_the_pin(self) -> None:
-        self.assertEqual(G2["nft"]["admin_port"], ADMIN["port"])
-
     def test_the_key_lives_in_the_service_user_home_and_is_not_in_git(self) -> None:
         self.assertTrue(ADMIN["key"].startswith("/home/hermes/.ssh/"))
         for path in ROLE.rglob("*"):

@@ -1,0 +1,10 @@
+---
+# The privileged side of the admin tier: root through sudo for the account that runs the admin bot, and the switch that
+# takes it away. The account, its home and its state volume belong to the gateway role (pins: state).
+operator_user: "{{ hermes_pins.state.owner }}"
+operator_home: "{{ hermes_pins.state.mount | dirname }}"
+operator_sudoers_path: /etc/sudoers.d/92-hermes-operator
+operator_sudo_logfile: /var/log/sudo-hermesops.log
+
+# `hermes-admin-access off` moves the sudoers file here. While this file exists the role keeps root closed.
+operator_off_file: /var/lib/hermes/operator-sudoers.off
