@@ -1,4 +1,10 @@
 ---
+- name: Load the Hermes pins
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../../bin/hermes/pins.json"
+    name: hermes_pins
+  tags: [always]
+
 - name: Install the health collector
   ansible.builtin.copy:
     src: hermes-health

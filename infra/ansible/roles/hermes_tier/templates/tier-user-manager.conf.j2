@@ -1,0 +1,5 @@
+# {{ ansible_managed }}
+# The whole user manager of the tier waits for the egress ruleset and fails closed if it is missing.
+[Unit]
+After=nftables.service
+Requires=nftables.service

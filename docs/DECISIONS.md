@@ -50,3 +50,8 @@ entry is rewritten, not kept as history (git has the history).
     worker loads it offline (it has no registry egress). A save and load recompress the layers, so a registry digest cannot
     survive the transfer; the image ID (the sha256 of the image config, which covers every layer) does, and the load checks it.
     Both values live in `bin/hermes/pins.json`; the policy names the ID, so Hermes never tries to pull.
+17. **One role builds every agent tier.** The role `hermes_tier` is instantiated once per tier from `tiers.<name>` in
+    `bin/hermes/pins.json` (account, proxy port, toolsets, sizes, ports). A new tier is data plus a persona, not a copy of a role. Account,
+    proxy, nftables table, managed directory, state volume and Desktop port are all derived from the tier name, so no two tiers can
+    share one. The sandbox pieces (subordinate ids, container storage, image, cgroup delegation) apply only to a tier with
+    `sandbox: true`.

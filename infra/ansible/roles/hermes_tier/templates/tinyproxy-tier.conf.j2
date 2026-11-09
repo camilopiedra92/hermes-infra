@@ -1,17 +1,17 @@
 # {{ ansible_managed }}
-# The proxy of the worker account: the names of the admin proxy plus the web search API. Nothing else resolves or connects.
+# The proxy of one tier account: the names of the admin proxy plus the names that tier needs. Nothing else resolves or connects.
 User {{ hermes_pins.egress.proxy_user }}
 Group {{ hermes_pins.egress.proxy_user }}
 Listen {{ hermes_pins.egress.nft.proxy_address }}
-Port {{ hermes_pins.egress.worker.proxy_port }}
+Port {{ hermes_tier_def.proxy_port }}
 Allow {{ hermes_pins.egress.nft.proxy_address }}
 Timeout 600
 MaxClients 20
 DisableViaHeader Yes
-PidFile "/run/tinyproxy-worker/tinyproxy.pid"
+PidFile "/run/tinyproxy-{{ hermes_tier_name }}/tinyproxy.pid"
 LogLevel Info
 ConnectPort 443
-Filter "/etc/tinyproxy/hermes-worker-allow.filter"
+Filter "/etc/tinyproxy/hermes-{{ hermes_tier_name }}-allow.filter"
 FilterType ere
 FilterCaseSensitive Off
 FilterURLs Off

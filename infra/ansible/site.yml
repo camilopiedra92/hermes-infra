@@ -23,5 +23,7 @@
       tags: [hardening]
     - role: health
       tags: [health]
-    - role: hermes_worker
+    - role: hermes_tier
+      vars:
+        hermes_tier_name: worker
       tags: [worker]

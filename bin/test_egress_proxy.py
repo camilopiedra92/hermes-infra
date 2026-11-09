@@ -134,16 +134,19 @@ class UnitAndEnvironmentTests(unittest.TestCase):
         import subprocess
         import tempfile
 
-        worker = HERMES["egress"]["worker"]
-        script = _fill(template("egress-proxy-generator.j2")).replace(
+        tiers = HERMES["tiers"]
+        text = _fill(template("egress-proxy-generator.j2")).replace(
             "{{ hermes_pins.egress.user.name }}", HERMES["egress"]["user"]["name"]
-        ).replace("{{ hermes_pins.egress.worker.user }}", worker["user"]).replace(
-            "{{ hermes_pins.egress.worker.proxy_port }}", str(worker["proxy_port"])
         )
-        expected = {
-            HERMES["egress"]["user"]["name"]: HERMES["egress"]["nft"]["proxy_port"],
-            worker["user"]: worker["proxy_port"],
-        }
+        loop = re.search(r"\{% for tier in hermes_pins.tiers.values\(\) %\}\n(.*?)\{% endfor %\}\n", text, re.DOTALL)
+        self.assertIsNotNone(loop, "the generator lists every tier from the pins")
+        cases = "".join(
+            loop.group(1).replace("{{ tier.user }}", t["user"]).replace("{{ tier.proxy_port }}", str(t["proxy_port"]))
+            for t in tiers.values()
+        )
+        script = text.replace(loop.group(0), cases)
+        expected = {HERMES["egress"]["user"]["name"]: HERMES["egress"]["nft"]["proxy_port"]}
+        expected.update({t["user"]: t["proxy_port"] for t in tiers.values()})
         with tempfile.TemporaryDirectory() as tmp:
             for account, port in {**expected, "someone": None}.items():
                 fake = Path(tmp) / "id"
@@ -157,14 +160,14 @@ class UnitAndEnvironmentTests(unittest.TestCase):
                 else:
                     self.assertIn(f"HTTPS_PROXY=http://127.0.0.1:{port}", out)
                     self.assertIn("NO_PROXY=localhost,127.0.0.1,::1", out)
-        self.assertNotEqual(worker["proxy_port"], HERMES["egress"]["nft"]["proxy_port"])
+        self.assertEqual(len(set(expected.values())), len(expected), "no two accounts share a proxy")
         block = TASKS[TASKS.index("Point each account at its own proxy") :]
         self.assertIn("owner: root", block)
 
-    def test_the_worker_may_reach_the_admin_names_plus_only_the_search_api(self) -> None:
-        self.assertEqual(HERMES["egress"]["worker"]["extra_domains"], ["api.keenable.ai"])
-        proxy = (ROOT / "infra" / "ansible" / "roles" / "hermes_worker" / "templates" / "tinyproxy-worker-allow.filter.j2").read_text(encoding="utf-8")
-        self.assertIn("hermes_pins.egress.domains + hermes_pins.egress.worker.extra_domains", proxy)
+    def test_a_tier_may_reach_the_admin_names_plus_only_the_names_its_pins_list(self) -> None:
+        self.assertEqual(HERMES["tiers"]["worker"]["extra_domains"], ["api.keenable.ai"])
+        proxy = (ROOT / "infra" / "ansible" / "roles" / "hermes_tier" / "templates" / "tinyproxy-tier-allow.filter.j2").read_text(encoding="utf-8")
+        self.assertIn("hermes_pins.egress.domains + hermes_tier_def.extra_domains", proxy)
 
     def test_telegram_has_its_own_explicit_proxy_in_the_managed_environment(self) -> None:
         env = _fill(template("managed.env.j2"))

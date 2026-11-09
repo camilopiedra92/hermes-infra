@@ -1,0 +1,22 @@
+#!/usr/sbin/nft -f
+# {{ ansible_managed }}
+# Fail closed for the {{ hermes_tier_name }} account (docs/ARCHITECTURE.md). The tier reads untrusted content, so the gateway
+# may reach only the local proxy (which allows named domains) and the loopback relay of the model plugin. It cannot
+# reach the tailnet, private ranges, the host's services, or the internet directly. There is no DNS for the uid.
+# Containers of a sandbox tier run under this uid too, with no network device of their own, so the same rule bounds them.
+
+table inet hermes_{{ hermes_tier_name }}
+delete table inet hermes_{{ hermes_tier_name }}
+
+table inet hermes_{{ hermes_tier_name }} {
+  counter hermes_{{ hermes_tier_name }}_held {}
+  counter hermes_{{ hermes_tier_name }}_proxy {}
+  counter hermes_{{ hermes_tier_name }}_loopback {}
+
+  chain output {
+    type filter hook output priority -1; policy accept;
+    meta skuid {{ hermes_tier_uid }} oifname "lo" ip daddr 127.0.0.1 tcp dport {{ hermes_tier_def.proxy_port }} counter name "hermes_{{ hermes_tier_name }}_proxy" accept
+    meta skuid {{ hermes_tier_uid }} oifname "lo" ip daddr 127.0.0.1 tcp dport 32768-60999 counter name "hermes_{{ hermes_tier_name }}_loopback" accept
+    meta skuid {{ hermes_tier_uid }} counter name "hermes_{{ hermes_tier_name }}_held" drop
+  }
+}

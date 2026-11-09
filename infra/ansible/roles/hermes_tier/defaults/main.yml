@@ -1,0 +1,78 @@
+---
+# One agent tier: its own account, its own code copy, its own state, its own policy and its own egress proxy
+# (docs/ARCHITECTURE.md). The play passes `hermes_tier_name`; everything else comes from `tiers.<name>` in
+# bin/hermes/pins.json, so the worker and the assistant are two instances of the same role.
+hermes_tier_def: "{{ hermes_pins.tiers[hermes_tier_name] }}"
+hermes_tier_user: "{{ hermes_tier_def.user }}"
+hermes_tier_sandbox: "{{ hermes_tier_def.sandbox }}"
+hermes_tier_home: "/home/{{ hermes_tier_user }}"
+hermes_tier_hermes_home: "{{ hermes_tier_home }}/.hermes"
+hermes_tier_code_parent: "/opt/hermes-{{ hermes_tier_name }}"
+hermes_tier_code_dir: "{{ hermes_tier_code_parent }}/hermes-agent"
+hermes_tier_managed_dir: "/etc/hermes-{{ hermes_tier_name }}"
+hermes_tier_claude_config_dir: "{{ hermes_tier_home }}/.claude"
+hermes_tier_plugin_dir: "{{ hermes_tier_hermes_home }}/plugins/{{ hermes_pins.model.plugin.install_name }}"
+hermes_tier_gateway_unit: hermes-gateway.service
+hermes_tier_uid: "{{ ansible_facts['getent_passwd'][hermes_tier_user][1] }}"
+hermes_tier_as_user:
+  - sudo
+  - -u
+  - "{{ hermes_tier_user }}"
+  - -H
+  - env
+  - -i
+  - "HOME={{ hermes_tier_home }}"
+  - "HERMES_HOME={{ hermes_tier_hermes_home }}"
+  - "PATH={{ hermes_tier_home }}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# The loopback backend that Hermes Desktop attaches to for the bots of this tier (published by Tailscale Serve on its
+# own HTTPS port, so it is a separate gateway with its own sign-in) and its login.
+hermes_tier_serve_port: "{{ hermes_tier_def.serve_port }}"
+hermes_tier_serve_https_port: "{{ hermes_tier_def.serve_https_port }}"
+hermes_tier_serve_dir: "/etc/hermes-{{ hermes_tier_name }}-dashboard"
+hermes_tier_serve_user: camilo
+hermes_tier_serve_unit: "hermes-{{ hermes_tier_name }}-serve.service"
+hermes_tier_claude_binary: "{{ hermes_pins.model.cli.root }}/{{ hermes_pins.model.cli.version }}/package/claude"
+
+# Sandbox tiers only. The container image is pinned in bin/hermes/pins.json. The admin pulls it by registry digest;
+# the tier loads it offline and runs it by image ID (a save and load cannot keep a registry digest: the layers are
+# recompressed).
+hermes_tier_image_pull: >-
+  {{ hermes_pins.sandbox.image.repository }}@{{ hermes_pins.sandbox.image.digest }}
+hermes_tier_image_id: "{{ hermes_pins.sandbox.image.id | regex_replace('^sha256:', '') }}"
+hermes_tier_podman_as_user:
+  - sudo
+  - -u
+  - "{{ hermes_tier_user }}"
+  - env
+  - "XDG_RUNTIME_DIR=/run/user/{{ hermes_tier_uid }}"
+  - "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ hermes_tier_uid }}/bus"
+  - "HOME={{ hermes_tier_home }}"
+  - systemd-run
+  - --user
+  - --pipe
+  - --wait
+  - --quiet
+  - podman
+
+# The capped filesystems of the tier: its Hermes state, and for a sandbox tier the storage of its rootless containers.
+hermes_tier_state_volume:
+  label: "{{ hermes_tier_name | capitalize }} state"
+  fs_label: "{{ hermes_tier_name }}-state"
+  image: "/var/lib/hermes/{{ hermes_tier_name }}-state.img"
+  mount: "{{ hermes_tier_hermes_home }}"
+  bytes: "{{ hermes_tier_def.state_bytes }}"
+  inodes: "{{ hermes_tier_def.state_inodes }}"
+  unit: "home-{{ hermes_tier_user }}-.hermes.mount"
+  mode: "0700"
+  owner: "{{ hermes_tier_user }}"
+hermes_tier_containers_volume:
+  label: "{{ hermes_tier_name | capitalize }} container storage"
+  fs_label: "{{ hermes_tier_name }}-containers"
+  image: "/var/lib/hermes/{{ hermes_tier_name }}-containers.img"
+  mount: "{{ hermes_tier_home }}/.local/share/containers"
+  bytes: "{{ hermes_tier_def.containers_bytes | default(0) }}"
+  inodes: "{{ hermes_tier_def.containers_inodes | default(0) }}"
+  unit: "home-{{ hermes_tier_user }}-.local-share-containers.mount"
+  mode: "0700"
+  owner: "{{ hermes_tier_user }}"

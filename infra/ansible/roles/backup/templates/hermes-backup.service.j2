@@ -12,7 +12,8 @@ IOSchedulingClass=idle
 PrivateTmp=true
 ProtectHome=false
 ProtectSystem=strict
-ReadWritePaths={{ backup_state_dir }} /home/hermes/.hermes /home/hermesworker/.hermes
+ReadWritePaths={{ backup_state_dir }} {{ backup_state_paths | join(' ') }}
 NoNewPrivileges=true
 CacheDirectory=hermes-backup
 Environment=RESTIC_CACHE_DIR=/var/cache/hermes-backup
+Environment=HERMES_BACKUP_STATES={{ backup_state_paths | join(':') }}

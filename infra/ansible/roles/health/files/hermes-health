@@ -16,6 +16,8 @@ from pathlib import Path
 OUT = Path("/var/lib/hermes-health/status.json")
 BACKUP_STATUS = Path("/var/lib/hermes-backup/status.json")
 STATE_MOUNT = "/home/hermes/.hermes"
+# Agent tiers as "name:account" pairs, written by Ansible from bin/hermes/pins.json.
+TIERS = [tuple(pair.split(":", 1)) for pair in os.environ.get("HERMES_TIERS", "").split(",") if pair]
 BACKUP_MAX_AGE = 26 * 3600
 DISK_WARN = 0.85
 MEM_MIN_MB = 300
@@ -39,10 +41,10 @@ def main() -> None:
     problems: list[str] = []
     info: dict[str, object] = {}
 
-    for unit in ("ssh", "tailscaled", "nftables", "tinyproxy", "auditd", "cron"):
+    for unit in ("ssh", "tailscaled", "nftables", "tinyproxy", "auditd", "cron", *(f"tinyproxy-{name}" for name, _ in TIERS)):
         if not active(unit):
             problems.append(f"service {unit} is not active")
-    for user in ("hermes", "hermesworker"):
+    for user in ("hermes", *(account for _, account in TIERS)):
         if not active("hermes-gateway.service", user=user):
             problems.append(f"the Hermes gateway of {user} is not active")
         uid = run("id", "-u", user).stdout.strip()
@@ -68,7 +70,9 @@ def main() -> None:
     except (OSError, ValueError, KeyError):
         problems.append("there is no backup status yet")
 
-    for label, path in (("root disk", "/"), ("state volume", STATE_MOUNT), ("worker state volume", "/home/hermesworker/.hermes")):
+    volumes = [("root disk", "/"), ("state volume", STATE_MOUNT)]
+    volumes += [(f"{name} state volume", f"/home/{account}/.hermes") for name, account in TIERS]
+    for label, path in volumes:
         usage = shutil.disk_usage(path)
         ratio = usage.used / usage.total
         info[label] = round(ratio, 2)

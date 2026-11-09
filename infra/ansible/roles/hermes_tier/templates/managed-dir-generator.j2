@@ -1,0 +1,6 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# Runs in the user manager of every account. The tier reads only its own policy directory. Root-owned, so the tier
+# cannot point Hermes at another managed directory. Units of the manager inherit the variable.
+[ "$(id -un)" = "{{ hermes_tier_user }}" ] && echo "HERMES_MANAGED_DIR={{ hermes_tier_managed_dir }}"
+exit 0

@@ -1,0 +1,378 @@
+---
+- name: Load the Hermes pins
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../../bin/hermes/pins.json"
+    name: hermes_pins
+  tags: [always]
+
+- name: Create the tier account (no password, no login shell)
+  ansible.builtin.user:
+    name: "{{ hermes_tier_user }}"
+    home: "{{ hermes_tier_home }}"
+    shell: /usr/sbin/nologin
+    password: "!"
+    create_home: true
+    umask: "0077"
+
+- name: Keep the home of the tier private
+  ansible.builtin.file:
+    path: "{{ hermes_tier_home }}"
+    state: directory
+    owner: "{{ hermes_tier_user }}"
+    group: "{{ hermes_tier_user }}"
+    mode: "0700"
+
+- name: Give the tier subordinate ids for rootless containers
+  ansible.builtin.lineinfile:
+    path: "{{ item }}"
+    regexp: "^{{ hermes_tier_user }}:"
+    line: "{{ hermes_tier_user }}:{{ hermes_tier_def.subid_start }}:{{ hermes_tier_def.subid_count }}"
+  loop:
+    - /etc/subuid
+    - /etc/subgid
+  when: hermes_tier_sandbox
+
+- name: Let the tier's user manager run without a login session
+  ansible.builtin.command:
+    argv: [loginctl, enable-linger, "{{ hermes_tier_user }}"]
+    creates: "/var/lib/systemd/linger/{{ hermes_tier_user }}"
+
+- name: Create the parents of the container storage mount point (the capped volume role creates only the leaf)
+  ansible.builtin.file:
+    path: "{{ hermes_tier_home }}/{{ item }}"
+    state: directory
+    owner: "{{ hermes_tier_user }}"
+    group: "{{ hermes_tier_user }}"
+    mode: "0700"
+  loop:
+    - .local
+    - .local/share
+  when: hermes_tier_sandbox
+
+# The unit name is what systemd derives from the mount path (bin/test_hermes_tier_role.py checks it).
+- name: Create the capped filesystems of the tier
+  ansible.builtin.include_role:
+    name: capped_volume
+  vars:
+    capped_volume_list: >-
+      {{ [hermes_tier_state_volume] + ([hermes_tier_containers_volume] if hermes_tier_sandbox else []) }}
+
+- name: Read whether the tier code is installed
+  ansible.builtin.stat:
+    path: "{{ hermes_tier_code_dir }}/.git"
+  register: hermes_tier_code_stat
+  changed_when: false
+  check_mode: false
+
+- name: Give the tier the parent of its code directory during the install
+  ansible.builtin.file:
+    path: "{{ hermes_tier_code_parent }}"
+    state: directory
+    owner: "{{ hermes_tier_user }}"
+    group: "{{ hermes_tier_user }}"
+    mode: "0755"
+  when: not hermes_tier_code_stat.stat.exists
+
+- name: Run the pinned installer as the tier, from a clean environment
+  ansible.builtin.command:
+    argv: >-
+      {{ hermes_tier_as_user
+         + ['USER=' ~ hermes_tier_user, 'LOGNAME=' ~ hermes_tier_user, 'LANG=C.UTF-8',
+            'HERMES_REPO_URL=' ~ hermes_pins.repo,
+            'bash', '/usr/local/share/hermes/install.sh',
+            '--commit', hermes_pins.commit, '--dir', hermes_tier_code_dir,
+            '--hermes-home', hermes_tier_hermes_home]
+         + hermes_pins.install.flags }}
+    chdir: /
+  when: not hermes_tier_code_stat.stat.exists
+  changed_when: true
+
+- name: Provision the messaging library
+  ansible.builtin.command:
+    argv: "{{ hermes_tier_as_user + [hermes_tier_home ~ '/.local/bin/hermes', 'pm', 'install', '--extra', item] }}"
+    chdir: /
+  loop: "{{ hermes_pins.install.extras }}"
+  when: not hermes_tier_code_stat.stat.exists
+  changed_when: true
+
+- name: Make the code owned by root, readable by everyone and writable by no one else
+  ansible.builtin.file:
+    path: "{{ hermes_tier_code_dir }}"
+    state: directory
+    recurse: true
+    owner: root
+    group: root
+    mode: "u+rwX,go+rX,go-w"
+  when: not hermes_tier_code_stat.stat.exists and not ansible_check_mode
+
+- name: Take the parent of the code directory back
+  ansible.builtin.file:
+    path: "{{ hermes_tier_code_parent }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: not ansible_check_mode
+
+# Every tagged slice below needs it, so it carries their tags. Plans without a tier (CI) must not run it.
+- name: Read the account of the tier
+  tags: [image, serve, persona]
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ hermes_tier_user }}"
+  changed_when: false
+  check_mode: false
+
+- name: Pin the policy the tier cannot change
+  ansible.builtin.file:
+    path: "{{ hermes_tier_managed_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the managed policy of the tier
+  ansible.builtin.template:
+    src: managed-config.yaml.j2
+    dest: "{{ hermes_tier_managed_dir }}/config.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+  register: hermes_tier_policy
+
+- name: Read the Telegram users the owner allowed on the admin bot (the same single owner)
+  ansible.builtin.slurp:
+    src: /etc/hermes/.env
+  register: hermes_tier_admin_env
+  changed_when: false
+  check_mode: false
+
+- name: Install the managed environment of the tier (nothing secret)
+  ansible.builtin.copy:
+    content: |
+      # Ansible managed. Not secret.
+      {% if hermes_tier_sandbox %}
+      HERMES_DOCKER_BINARY=/usr/bin/podman
+      {% endif %}
+      HERMES_TELEGRAM_DISABLE_FALLBACK_IPS=true
+      {{ (hermes_tier_admin_env.content | b64decode).splitlines()
+         | select('match', '^TELEGRAM_ALLOWED_USERS=') | first }}
+    dest: "{{ hermes_tier_managed_dir }}/.env"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create the Claude login directory of the tier
+  ansible.builtin.file:
+    path: "{{ hermes_tier_claude_config_dir }}"
+    state: directory
+    owner: "{{ hermes_tier_user }}"
+    group: "{{ hermes_tier_user }}"
+    mode: "0700"
+
+- name: Create the output directory the container shares with the tier gateway
+  ansible.builtin.file:
+    path: "{{ hermes_tier_hermes_home }}/cache/documents"
+    state: directory
+    owner: "{{ hermes_tier_user }}"
+    group: "{{ hermes_tier_user }}"
+    mode: "0700"
+  when: hermes_tier_sandbox
+
+- name: Read whether the model plugin is installed
+  ansible.builtin.command:
+    argv: ["/usr/local/share/hermes/plugin-manifest.sh", "{{ hermes_tier_plugin_dir }}"]
+  register: hermes_tier_plugin_hash
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install the model plugin at the pinned commit
+  ansible.builtin.command:
+    argv: >-
+      {{ hermes_tier_as_user
+         + ['HERMES_MANAGED_DIR=' ~ hermes_tier_managed_dir,
+            hermes_tier_home ~ '/.local/bin/hermes', 'plugins', 'install',
+            hermes_pins.model.plugin.identifier, '--ref', hermes_pins.model.plugin.ref, '--yes-deps', '--no-enable']
+         + (['--force'] if (hermes_tier_plugin_hash.stdout | default('') | trim) != '' else []) }}
+    chdir: /
+  when: (hermes_tier_plugin_hash.stdout | default('') | trim) != hermes_pins.model.plugin.manifest_sha256
+  changed_when: true
+
+- name: Read the hash of the plugin files after the install
+  ansible.builtin.command:
+    argv: ["/usr/local/share/hermes/plugin-manifest.sh", "{{ hermes_tier_plugin_dir }}"]
+  register: hermes_tier_plugin_hash_after
+  changed_when: false
+  check_mode: false
+  failed_when:
+    - hermes_tier_plugin_hash_after.stdout | trim != hermes_pins.model.plugin.manifest_sha256
+    - not ansible_check_mode
+
+- name: Create the directory of the environment generators of user managers
+  ansible.builtin.file:
+    path: /etc/systemd/user-environment-generators
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Pin the managed directory of the tier in the environment of its user manager
+  ansible.builtin.template:
+    src: managed-dir-generator.j2
+    dest: "/etc/systemd/user-environment-generators/60-hermes-managed-dir-{{ hermes_tier_name }}"
+    owner: root
+    group: root
+    mode: "0755"
+    validate: sh -n %s
+  register: hermes_tier_generator
+
+- name: Create the drop-in directory of the user manager of the tier
+  ansible.builtin.file:
+    path: "/etc/systemd/system/user@{{ hermes_tier_uid }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Delegate the cgroup controllers that rootless containers need to every user manager
+  ansible.builtin.template:
+    src: delegate.conf.j2
+    dest: /etc/systemd/system/user@.service.d/50-hermes-delegate.conf
+    owner: root
+    group: root
+    mode: "0644"
+  register: hermes_tier_delegate
+  when: hermes_tier_sandbox
+
+- name: Create the slice drop-in directory of the tier
+  ansible.builtin.file:
+    path: "/etc/systemd/system/user-{{ hermes_tier_uid }}.slice.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Cap the memory of everything the tier runs
+  ansible.builtin.template:
+    src: tier-slice.conf.j2
+    dest: "/etc/systemd/system/user-{{ hermes_tier_uid }}.slice.d/50-hermes-{{ hermes_tier_name }}.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  register: hermes_tier_slice
+
+- name: Order the user manager of the tier after the egress ruleset
+  ansible.builtin.template:
+    src: tier-user-manager.conf.j2
+    dest: "/etc/systemd/system/user@{{ hermes_tier_uid }}.service.d/60-hermes-{{ hermes_tier_name }}.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  register: hermes_tier_manager_dropin
+
+- name: Let Hermes write the gateway unit of the tier, neither started nor enabled
+  ansible.builtin.command:
+    argv: >-
+      {{ hermes_tier_as_user
+         + ['HERMES_MANAGED_DIR=' ~ hermes_tier_managed_dir,
+            'XDG_RUNTIME_DIR=/run/user/' ~ hermes_tier_uid,
+            'DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/' ~ hermes_tier_uid ~ '/bus',
+            hermes_tier_home ~ '/.local/bin/hermes', 'gateway', 'install', '--no-start-now', '--no-start-on-login'] }}
+    creates: "{{ hermes_tier_home }}/.config/systemd/user/{{ hermes_tier_gateway_unit }}"
+  when: not ansible_check_mode
+
+- name: Run the proxy of the tier
+  ansible.builtin.import_tasks: proxy.yml
+
+- name: Hold the tier behind the local proxy (fail closed)
+  ansible.builtin.template:
+    src: tier.nft.j2
+    dest: /etc/nftables.d/30-hermes-{{ hermes_tier_name }}.nft
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/nft -c -f %s
+  notify: "Load the egress rule of {{ hermes_tier_name }}"
+
+- name: Apply the egress rule before the gateway can start
+  ansible.builtin.meta: flush_handlers
+
+- name: Load the container image of the tier (offline)
+  ansible.builtin.import_tasks: image.yml
+  when: hermes_tier_sandbox
+  tags: [image]
+
+# The bot token is the owner's and arrives after the account exists: the gateway is enabled at boot and starts as soon
+# as the account has its own .env, so a first run never leaves a failing unit behind.
+- name: Read whether the tier has its bot token
+  ansible.builtin.stat:
+    path: "{{ hermes_tier_hermes_home }}/.env"
+  register: hermes_tier_env
+  changed_when: false
+  check_mode: false
+
+- name: Enable the tier gateway at boot and keep it running
+  ansible.builtin.systemd_service:
+    name: "{{ hermes_tier_gateway_unit }}"
+    scope: user
+    enabled: true
+    daemon_reload: true
+    state: >-
+      {{ ('restarted' if (hermes_tier_generator is changed or hermes_tier_manager_dropin is changed
+      or hermes_tier_policy is changed) else 'started') if hermes_tier_env.stat.exists else omit }}
+  become: true
+  become_user: "{{ hermes_tier_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ hermes_tier_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ hermes_tier_uid }}/bus"
+  vars:
+    ansible_remote_tmp: "/tmp/.ansible-{{ hermes_tier_user }}"
+  when: not ansible_check_mode
+
+# One identity for the owner across bots: the tier starts from the owner's profile as the admin agent knows it.
+# Seeded once and never overwritten, because the tier keeps learning on its own.
+- name: Create the memory directory of the tier
+  tags: [persona]
+  ansible.builtin.file:
+    path: "{{ hermes_tier_hermes_home }}/memories"
+    state: directory
+    owner: "{{ hermes_tier_user }}"
+    group: "{{ hermes_tier_user }}"
+    mode: "0700"
+
+- name: Seed the owner profile of the tier from the admin agent (only when absent)
+  tags: [persona]
+  ansible.builtin.copy:
+    src: /home/hermes/.hermes/memories/USER.md
+    dest: "{{ hermes_tier_hermes_home }}/memories/USER.md"
+    remote_src: true
+    owner: "{{ hermes_tier_user }}"
+    group: "{{ hermes_tier_user }}"
+    mode: "0600"
+    force: false
+
+# The identity is the operator's: the repository owns SOUL.md and resets it, so a poisoned write cannot stick.
+- name: Install the persona of the tier
+  tags: [persona]
+  ansible.builtin.copy:
+    src: "{{ hermes_tier_name }}/SOUL.md"
+    dest: "{{ hermes_tier_hermes_home }}/SOUL.md"
+    owner: "{{ hermes_tier_user }}"
+    group: "{{ hermes_tier_user }}"
+    mode: "0600"
+
+# Starting memory, seeded once: the tier curates it from then on.
+- name: Seed the memory of the tier (only when absent)
+  tags: [persona]
+  ansible.builtin.copy:
+    src: "{{ hermes_tier_name }}/MEMORY.md"
+    dest: "{{ hermes_tier_hermes_home }}/memories/MEMORY.md"
+    owner: "{{ hermes_tier_user }}"
+    group: "{{ hermes_tier_user }}"
+    mode: "0600"
+    force: false
+
+- name: Install the backend that Hermes Desktop attaches to for the tier bots
+  ansible.builtin.import_tasks: serve.yml
+  tags: [serve, never]

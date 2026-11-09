@@ -1,6 +1,0 @@
-# {{ ansible_managed }}
-# Everything the worker runs, the gateway and its containers together, stays inside this ceiling so it can never starve
-# the admin gateway or the host. It never swaps.
-[Slice]
-MemoryMax={{ hermes_worker_slice_memory_max }}
-MemorySwapMax=0

@@ -1,5 +1,0 @@
-# {{ ansible_managed }}
-# The whole user manager of the worker waits for the egress ruleset and fails closed if it is missing.
-[Unit]
-After=nftables.service
-Requires=nftables.service
