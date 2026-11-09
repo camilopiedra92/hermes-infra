@@ -71,3 +71,12 @@ entry is rewritten, not kept as history (git has the history).
     account, nftables drops the rest). Because that account has root, the hold is friction and an audit trail, not a boundary;
     the control that matters is that untrusted content is read by the worker tier (`hermes-ask-worker`, prompt on stdin, answer
     fenced as untrusted), which holds no credential. Adding a host to the list is a pull request.
+20. **The tier gateways stay user units; account isolation comes from the kernel, not from systemd sandboxing.** A tier runs as an
+    unprivileged account, and for such an account `ProtectSystem`, `ProtectKernel*` and `PrivateDevices` add nothing the file
+    permissions do not already give. What would add something (seccomp, `NoNewPrivileges`, mount namespaces) cannot be had in a
+    user unit next to rootless Podman: in a user manager those options run the service in a user namespace, where root-owned files
+    appear as `nobody` (it broke the SSH terminal of the admin backend) and the setuid `newuidmap` stops working. Moving the tiers
+    to system units would need cgroupfs delegation for Podman and a second set of units for the same Hermes-written gateway, for
+    a gain that does not justify it. A measured audit from inside a tier found the real exposures instead: another account's
+    command lines were readable through `/proc`, and files written by the admin session were world-readable in `/tmp`. Both are
+    closed (`hidepid=2`, `UMASK 027`, a three-day `/tmp` cleaner) and covered by tests.

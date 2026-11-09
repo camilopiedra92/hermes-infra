@@ -57,6 +57,9 @@ and a proxy that names only the hosts of its MCP servers and its search vendor.
   reboots only in the maintenance window (Sunday 05:00-07:00 America/Bogota).
 - Attack surface is removed, not masked: the stock cloud image's snapd, iSCSI, multipath, hypervisor agent, crash uploader and
   entropy fetch are purged, and the container auto-update timer is masked (images are pinned and loaded by the role).
+- Accounts that share the host cannot see each other: `/proc` is mounted with `hidepid=2` (a tier cannot read the command line
+  of another account's processes), new files are created private to their owner (`UMASK 027` with user private groups), and
+  `/tmp` is cleaned after three days, so the output of a finished admin job does not stay readable for a tier.
 - Root services (collector, backup, restore drill) share one systemd sandbox (no module, clock, reboot, device or namespace
   access). User units carry no systemd sandbox: in a user manager those options run the service in a user namespace, where
   root-owned files such as the SSH config of the administration terminal appear as nobody, and rootless Podman needs the

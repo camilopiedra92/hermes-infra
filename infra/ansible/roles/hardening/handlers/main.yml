@@ -11,3 +11,9 @@
 - name: Reload systemd
   ansible.builtin.systemd_service:
     daemon_reload: true
+
+# At boot and on demand, systemd-remount-fs applies the options of /etc/fstab to the API file systems such as /proc.
+- name: Remount /proc with hidepid
+  ansible.builtin.systemd_service:
+    name: systemd-remount-fs.service
+    state: restarted
