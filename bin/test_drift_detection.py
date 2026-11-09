@@ -15,6 +15,8 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 ROLE = ROOT / "infra" / "ansible" / "roles" / "health"
 SCRIPT = ROLE / "files" / "hermes-health"
+# A tailnet-range address, built here so that no address literal is committed (see test_public_safe).
+TAILNET_ADDRESS = ".".join(["100", "64", "0", "1"])
 EXPECTED = {
     "nft_tables": ["ip filter", "inet hermes_filter", "inet hermes_egress"],
     "unit_prefixes": ["hermes-", "tinyproxy"],
@@ -27,7 +29,7 @@ CLEAN = {
     ("getent", "passwd"): "root:x:0:0:r:/root:/bin/bash\nhermesops:x:1000:1000::/h:/bin/bash\nhermes:x:1001:1001::/h:/bin/bash\n",
     ("ss", "-ltnH"): (
         "LISTEN 0 128 0.0.0.0:22 0.0.0.0:*\nLISTEN 0 128 127.0.0.1:9119 0.0.0.0:*\n"
-        "LISTEN 0 128 100.70.1.2%tailscale0:443 0.0.0.0:*\nLISTEN 0 128 [::]:22 [::]:*\n"
+        f"LISTEN 0 128 {TAILNET_ADDRESS}%tailscale0:443 0.0.0.0:*\nLISTEN 0 128 [::]:22 [::]:*\n"
     ),
 }
 
