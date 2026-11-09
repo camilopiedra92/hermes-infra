@@ -1,0 +1,23 @@
+#!/usr/sbin/nft -f
+# {{ ansible_managed }}
+# Egress hold of the administration account (uid {{ hermes_pins.admin.uid }}), the hands of the admin agent. It reaches the
+# internet only through its own local proxy, which allows the names the administrator work needs (GitHub, the package and
+# image registries, the Hetzner, Cloudflare and Tailscale APIs, the Hermes docs). Loopback stays open: the account talks to
+# local services. Everything else is dropped and counted.
+# This is friction and an audit trail, not a boundary: the account has root through sudo, and a root process is not matched
+# here. What the agent reads from outside is therefore limited by the rule that untrusted content goes to a worker tier.
+
+table inet {{ admin_egress_table }}
+delete table inet {{ admin_egress_table }}
+
+table inet {{ admin_egress_table }} {
+  counter ops_held {}
+  counter ops_proxy {}
+
+  chain output {
+    type filter hook output priority -1; policy accept;
+    meta skuid {{ hermes_pins.admin.uid }} oifname "lo" ip daddr {{ admin_egress_proxy_address }} tcp dport {{ hermes_pins.admin.egress.proxy_port }} counter name "ops_proxy" accept
+    meta skuid {{ hermes_pins.admin.uid }} oifname "lo" accept
+    meta skuid {{ hermes_pins.admin.uid }} counter name "ops_held" drop
+  }
+}

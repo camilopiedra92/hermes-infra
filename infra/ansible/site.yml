@@ -17,6 +17,8 @@
       tags: [bot_admin]
     - role: hermes_gateway
       tags: [gateway]
+    - role: admin_egress
+      tags: [ops_egress]
     - role: backup
       tags: [backup]
     - role: hardening

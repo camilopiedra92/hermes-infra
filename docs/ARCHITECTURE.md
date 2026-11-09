@@ -26,12 +26,20 @@ the powerful credentials, and the agent that holds them never reads untrusted co
 
 | Tier | Who | Inputs | Capability |
 | --- | --- | --- | --- |
-| 0 | Admin agent (the Hermes gateway, owner-only Telegram) | owner messages, trusted tools | root through audited sudo, cloud tokens, approvals manual |
+| 0 | Admin agent (the Hermes gateway, owner-only Telegram) | owner messages, its own repository and the documented APIs of the providers it administers | root through audited sudo, cloud tokens, approvals manual |
 | 1 | Worker agents (own account and Hermes instance) | web, public repos, any text | rootless container only; no host or cloud credential; scoped GitHub token for scratch repositories |
 | 2 | Personal assistant (own account and Hermes instance) | web, calendar and task text | owner's Calendar and Todoist through remote MCP (OAuth); terminal and files only inside the rootless container; no host or cloud credential; every MCP write asks the owner |
 | - | Break-glass | owner | Hetzner console, Tailscale from the owner's phone |
 
 Worker output (pull requests, files) is untrusted data for tier 0. A worker never merges, never applies.
+
+**What the admin agent may read.** Its hands are the account `hermesadmin`, which has root through sudo, so a network rule on
+that account is friction and an audit trail, not a boundary. The account therefore reaches the internet only through its own
+proxy, which names the hosts the administrator work needs (GitHub, the package and image registries, the Hetzner, Cloudflare
+and Tailscale APIs, the Hermes docs), and everything else is dropped and counted. The rule that does the real work is a
+process one: anything that is not on that list (a web page, an issue or pull request written by someone else, a file from an
+unknown source) is read by the worker tier through `hermes-ask-worker`, and the answer comes back fenced as untrusted data.
+The assistant tier is never used for this, because it holds personal data.
 
 Tier 2 holds personal data and reads the web, which is the combination an injected instruction needs to do harm. Its
 containment is capability plus the sandbox: terminal and file tools run only in the container (no network, no credential,

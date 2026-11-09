@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+# The proxy of the administration account: named domains, TLS only, nothing else resolves or connects.
+User {{ hermes_pins.egress.proxy_user }}
+Group {{ hermes_pins.egress.proxy_user }}
+Listen {{ admin_egress_proxy_address }}
+Port {{ hermes_pins.admin.egress.proxy_port }}
+Allow {{ admin_egress_proxy_address }}
+Timeout 600
+MaxClients 20
+DisableViaHeader Yes
+PidFile "/run/tinyproxy-ops/tinyproxy.pid"
+LogLevel Info
+ConnectPort 443
+Filter "/etc/tinyproxy/hermes-ops-allow.filter"
+FilterType ere
+FilterCaseSensitive Off
+FilterURLs Off
+FilterDefaultDeny Yes

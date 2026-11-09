@@ -64,3 +64,10 @@ entry is rewritten, not kept as history (git has the history).
     server, so each write asks the owner and a cron run is read-only. Google's Calendar server needs the owner's own OAuth client
     (it refuses dynamic registration); its id and secret live in the tier's `.env`, never in the policy. Publish that OAuth app
     "In production": in "Testing" Google expires refresh tokens after seven days.
+19. **The administration account has its own egress proxy, and untrusted reading is delegated.** The egress hold of decision 8
+    covered the gateway account (uid 1001), but the admin agent acts through the SSH backend as `hermesadmin` (uid 1002), which
+    had no hold, so the agent could read the open web from the account that has root. `hermesadmin` now goes out only through a
+    local proxy with an exact-host allowlist (`admin.egress` in `bin/hermes/pins.json`; sshd sets the proxy variables for that
+    account, nftables drops the rest). Because that account has root, the hold is friction and an audit trail, not a boundary;
+    the control that matters is that untrusted content is read by the worker tier (`hermes-ask-worker`, prompt on stdin, answer
+    fenced as untrusted), which holds no credential. Adding a host to the list is a pull request.
