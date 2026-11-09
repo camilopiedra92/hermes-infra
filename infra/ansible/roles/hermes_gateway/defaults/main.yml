@@ -27,6 +27,7 @@ hermes_gateway_claude_binary: "{{ hermes_pins.model.cli.root }}/{{ hermes_pins.m
 hermes_gateway_plugin_dir: "{{ hermes_pins.install.hermes_home }}/plugins/{{ hermes_pins.model.plugin.install_name }}"
 hermes_gateway_manifest_script: /usr/local/share/hermes/plugin-manifest.sh
 
-# The loopback backend that Hermes Desktop attaches to (through an SSH tunnel), and its token.
+# The loopback backend that Hermes Desktop attaches to (published by Tailscale Serve) and its login.
 hermes_gateway_serve_port: 9119
-hermes_gateway_serve_token: /etc/hermes-dashboard/session-token
+hermes_gateway_serve_dir: /etc/hermes-dashboard
+hermes_gateway_serve_user: camilo

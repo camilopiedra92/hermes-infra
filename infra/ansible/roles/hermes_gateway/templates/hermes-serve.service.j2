@@ -13,7 +13,7 @@ ExecStart={{ hermes_gateway_cli }} serve --host 127.0.0.1 --port {{ hermes_gatew
 WorkingDirectory={{ hermes_pins.state.mount }}
 Environment="HERMES_HOME={{ hermes_pins.state.mount }}"
 Environment="HERMES_DASHBOARD_PUBLIC_URL={{ hermes_gateway_serve_url }}"
-Environment="HERMES_DASHBOARD_SESSION_TOKEN=file:{{ hermes_gateway_serve_token }}"
+EnvironmentFile={{ hermes_gateway_serve_dir }}/serve.env
 Environment="HTTPS_PROXY=http://{{ hermes_pins.egress.nft.proxy_address }}:{{ hermes_pins.egress.nft.proxy_port }}"
 Environment="NO_PROXY=localhost,127.0.0.1,::1"
 Environment="CLAUDE_SUBSCRIPTION_DIRECTSDK_COMMAND={{ hermes_gateway_claude_binary }}"
