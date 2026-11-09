@@ -50,7 +50,7 @@ class TierDefinitionTests(unittest.TestCase):
         self.assertIn("worker", tiers)
         users = [t["user"] for t in tiers.values()]
         ports = [t["proxy_port"] for t in tiers.values()] + [PINS["egress"]["nft"]["proxy_port"]]
-        serve = [t["serve_port"] for t in tiers.values()] + [t["serve_https_port"] for t in tiers.values()]
+        serve = [t[k] for t in tiers.values() for k in ("serve_port", "serve_https_port") if k in t]
         self.assertEqual(len(users), len(set(users)))
         self.assertNotIn(PINS["egress"]["user"]["name"], users)
         self.assertEqual(len(ports), len(set(ports)))
@@ -95,6 +95,18 @@ class TierDefinitionTests(unittest.TestCase):
             for tier in PINS["tiers"].values():
                 self.assertNotIn(tier["user"], text, f"{path.name} names an account instead of reading the pins")
         self.assertIn("hermes_pins.tiers", (roles / "backup" / "defaults" / "main.yml").read_text(encoding="utf-8"))
+
+    def test_a_tier_with_remote_mcp_servers_may_reach_exactly_their_hosts_and_asks_before_every_write(self) -> None:
+        from urllib.parse import urlparse
+
+        assistant = PINS["tiers"]["assistant"]
+        for name, server in assistant["mcp_servers"].items():
+            self.assertIn(urlparse(server["url"]).hostname, assistant["extra_domains"], name)
+            self.assertIn(f"mcp-{name}", assistant["toolsets"], name)
+        template = (ROLE / "templates" / "managed-config.yaml.j2").read_text(encoding="utf-8")
+        self.assertIn("trust: untrusted", template)
+        self.assertNotIn("client_secret: \"", template.replace('"${GOOGLE_OAUTH_CLIENT_SECRET}"', ""))
+        self.assertNotIn("serve_port", assistant, "the Desktop backend of a tier is opt-in, with its own ACL and firewall port")
 
 
 if __name__ == "__main__":

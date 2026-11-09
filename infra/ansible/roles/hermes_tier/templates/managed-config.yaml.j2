@@ -51,6 +51,24 @@ terminal:
   docker_volumes:
     - {{ hermes_tier_hermes_home }}/cache/documents:/output
 {% endif %}
+{% if hermes_tier_def.mcp_servers is defined %}
+
+# Remote MCP servers over OAuth. The tokens stay in the tier's own home (mode 600) and never leave it. Every write a tool
+# makes asks the owner first (trust: untrusted); a cron run cannot ask, so it can only read. A Google OAuth client is the
+# owner's own, kept in the tier's .env and referenced here, so nothing secret is in this world-readable file.
+mcp_servers:
+{% for name, server in hermes_tier_def.mcp_servers.items() %}
+  {{ name }}:
+    url: {{ server.url }}
+    auth: oauth
+    trust: untrusted
+{% if server.oauth_client %}
+    oauth:
+      client_id: "${GOOGLE_OAUTH_CLIENT_ID}"
+      client_secret: "${GOOGLE_OAUTH_CLIENT_SECRET}"
+{% endif %}
+{% endfor %}
+{% endif %}
 
 approvals:
   mode: manual

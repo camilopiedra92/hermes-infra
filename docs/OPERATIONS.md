@@ -120,3 +120,15 @@ are in `<login files>/serve.env` (readable by the service group). Rotate by dele
   (`systemd-run --user --pipe --wait`).
 - The worker's Claude login is interactive: run `claude auth login` with stdin from a FIFO, give the owner the URL, write the
   code he returns into the FIFO.
+
+## Personal assistant (tier 2)
+
+- Built by `--tags assistant`. The account exists and the gateway is enabled at boot after the first run; it starts when the
+  owner's bot token is in `/home/hermesassistant/.hermes/.env` (`TELEGRAM_BOT_TOKEN=`; the allowed user comes from the managed
+  environment). Then run `--tags assistant` again.
+- Owner steps, once: create the bot in @BotFather; log in to Claude as that user (same FIFO procedure as the worker); authorize
+  Todoist (`hermes mcp login todoist` as the assistant); create a Google OAuth client (free Google Cloud project, Calendar API
+  on, consent screen published "In production"), put `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` in the tier's
+  `.env`, then `hermes mcp login google_calendar`. OAuth tokens land in `/home/hermesassistant/.hermes/mcp-tokens/` (mode 600) and
+  the backup never reads them.
+- After the first login list the tools of each server and exclude the destructive ones with `tools.exclude` in the policy.

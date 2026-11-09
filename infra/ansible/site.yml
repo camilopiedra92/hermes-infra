@@ -27,3 +27,7 @@
       vars:
         hermes_tier_name: worker
       tags: [worker]
+    - role: hermes_tier
+      vars:
+        hermes_tier_name: assistant
+      tags: [assistant]

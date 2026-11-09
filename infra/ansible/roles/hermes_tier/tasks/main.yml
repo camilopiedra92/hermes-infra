@@ -120,6 +120,7 @@
   ansible.builtin.getent:
     database: passwd
     key: "{{ hermes_tier_user }}"
+    fail_key: false
   changed_when: false
   check_mode: false
 
@@ -375,4 +376,5 @@
 
 - name: Install the backend that Hermes Desktop attaches to for the tier bots
   ansible.builtin.import_tasks: serve.yml
+  when: hermes_tier_def.serve_port is defined
   tags: [serve, never]

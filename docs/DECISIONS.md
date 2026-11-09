@@ -55,3 +55,10 @@ entry is rewritten, not kept as history (git has the history).
     proxy, nftables table, managed directory, state volume and Desktop port are all derived from the tier name, so no two tiers can
     share one. The sandbox pieces (subordinate ids, container storage, image, cgroup delegation) apply only to a tier with
     `sandbox: true`.
+18. **The personal assistant is its own tier.** It combines three things no other agent may hold together: the owner's personal data
+    (Google Calendar, Todoist), untrusted input (web search) and write capability. It therefore has its own Linux account, state
+    volume, policy and proxy (tier 2). Its hands are vendor-hosted remote MCP servers over OAuth 2.1 (Todoist, Google Calendar), so
+    no local code or credential-handling is carried. Least privilege: no shell, no file tools, `trust: untrusted` on every
+    server, so each write asks the owner and a cron run is read-only. Google's Calendar server needs the owner's own OAuth client
+    (it refuses dynamic registration); its id and secret live in the tier's `.env`, never in the policy. Publish that OAuth app
+    "In production": in "Testing" Google expires refresh tokens after seven days.
