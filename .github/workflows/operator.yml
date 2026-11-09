@@ -1,0 +1,46 @@
+name: operator
+
+# Applies the operator role to a runner with a real sudo and proves the root access of the admin bot:
+# the service user becomes root, sudo logs it as text, and the switch takes root away and gives it back.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/operator.yml"
+      - ".github/scripts/operator-check.sh"
+      - "infra/ansible/roles/operator/**"
+      - "infra/ansible/site.yml"
+      - "bin/hermes/pins.json"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  operator:
+    name: operator
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Install Ansible, with the hashes the host pipeline uses
+        run: python -m pip install --require-hashes --no-deps -r .github/requirements-ci.txt
+
+      - name: Prerequisites
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends sudo
+
+      - name: Apply the role and prove the root access
+        run: sudo env PATH="$PATH" .github/scripts/operator-check.sh

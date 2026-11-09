@@ -1,0 +1,58 @@
+#!/bin/bash
+# Close, open or inspect the root access of the Hermes admin bot (ADR-0029).
+#
+#   hermes-admin-access status   show whether the bot has root and whether it has sudo sessions
+#   hermes-admin-access off      remove its sudo rule, end its sudo sessions, keep it closed
+#   hermes-admin-access on       put the rule back
+#
+# `off` moves the sudoers file to a place only root can read. The bot keeps running, without root, and its audit trail stays.
+# While that file exists the Ansible role keeps root closed. Run it as root, from an operator session or from the
+# provider's web console.
+set -euo pipefail
+
+root=${HERMES_ADMIN_ROOT:-}
+account=${HERMES_ADMIN_ACCOUNT:-hermes}
+rule="${root}/etc/sudoers.d/92-hermes-operator"
+off_file="${root}/var/lib/hermes/operator-sudoers.off"
+
+is_open() { [[ -s $rule && ! -e $off_file ]]; }
+
+case ${1:-} in
+  status)
+    if is_open; then echo "admin access: on"; else echo "admin access: off"; fi
+    sessions=0
+    if [[ -z $root ]]; then
+      sessions=$(pgrep -u "$account" -c -x sudo 2>/dev/null || true)
+    fi
+    echo "sudo sessions: ${sessions:-0}"
+    ;;
+  off)
+    if [[ -e $off_file ]]; then
+      echo "admin access: already off"
+    elif [[ -s $rule ]]; then
+      install -d -m 0755 -o root -g root "$(dirname "$off_file")" 2>/dev/null || mkdir -p "$(dirname "$off_file")"
+      mv -- "$rule" "$off_file"
+      chmod 0600 "$off_file"
+      echo "admin access: off"
+    else
+      echo "hermes-admin-access: there is no sudo rule to move" >&2
+      exit 1
+    fi
+    if [[ -z $root ]]; then
+      pkill -KILL -u "$account" -x sudo 2>/dev/null || true
+    fi
+    ;;
+  on)
+    if [[ ! -e $off_file ]]; then
+      echo "hermes-admin-access: access is not closed; run the Ansible role if the rule is missing" >&2
+      exit 1
+    fi
+    mv -- "$off_file" "$rule"
+    chmod 0440 "$rule"
+    echo "admin access: on"
+    ;;
+  *)
+    echo "usage: hermes-admin-access status|off|on" >&2
+    exit 2
+    ;;
+esac
