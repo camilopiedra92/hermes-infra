@@ -343,7 +343,7 @@
     mode: "0600"
     force: false
 
-# The identity is the operator's: the repository owns SOUL.md and resets it, so a poisoned write cannot persist a persona.
+# The identity is the operator's: the repository owns SOUL.md and resets it, so a poisoned write cannot stick.
 - name: Install the persona of the worker
   tags: [persona]
   ansible.builtin.copy:
