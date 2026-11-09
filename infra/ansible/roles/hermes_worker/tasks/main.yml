@@ -128,8 +128,9 @@
     mode: "0755"
   when: not ansible_check_mode
 
+# Needed by every tagged slice below, so it carries their tags (it must not run in plans where the worker does not exist yet).
 - name: Read the account of the worker
-  tags: [always]
+  tags: [worker, image, serve, persona]
   ansible.builtin.getent:
     database: passwd
     key: "{{ hermes_worker_user }}"
