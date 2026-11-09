@@ -53,6 +53,10 @@
   ansible.builtin.import_tasks: egress.yml
   tags: [egress, never]
 
+- name: Install the loopback backend that Hermes Desktop attaches to
+  ansible.builtin.import_tasks: serve.yml
+  tags: [serve, never]
+
 - name: Install the briefing the bot reads at the start of every conversation
   ansible.builtin.import_tasks: briefing.yml
   tags: [briefing]

@@ -1,0 +1,49 @@
+---
+# The loopback backend for Hermes Desktop. The credential is a random token that only the owner's tunnel can use.
+- name: Create the directory of the Desktop token
+  ansible.builtin.file:
+    path: "{{ hermes_gateway_serve_token | dirname }}"
+    state: directory
+    owner: root
+    group: "{{ hermes_pins.state.owner }}"
+    mode: "0750"
+
+- name: Generate the Desktop token once
+  ansible.builtin.shell:
+    cmd: umask 077 && openssl rand -hex 32 > '{{ hermes_gateway_serve_token }}'
+    creates: "{{ hermes_gateway_serve_token }}"
+  no_log: true
+
+- name: Keep the Desktop token readable by the service user only
+  ansible.builtin.file:
+    path: "{{ hermes_gateway_serve_token }}"
+    owner: root
+    group: "{{ hermes_pins.state.owner }}"
+    mode: "0640"
+  when: not ansible_check_mode
+
+- name: Install the backend unit
+  ansible.builtin.template:
+    src: hermes-serve.service.j2
+    dest: /etc/systemd/user/hermes-serve.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload user units
+
+- name: Apply the unit before it is enabled
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the backend at boot and keep it running
+  ansible.builtin.systemd_service:
+    name: hermes-serve.service
+    scope: user
+    enabled: true
+    state: started
+  become: true
+  become_user: "{{ hermes_pins.state.owner }}"
+  vars:
+    ansible_remote_tmp: "/tmp/.ansible-{{ hermes_pins.state.owner }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ hermes_gateway_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ hermes_gateway_uid }}/bus"

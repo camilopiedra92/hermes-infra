@@ -26,3 +26,7 @@ hermes_gateway_cli: "{{ hermes_gateway_user_home }}/.local/bin/hermes"
 hermes_gateway_claude_binary: "{{ hermes_pins.model.cli.root }}/{{ hermes_pins.model.cli.version }}/package/claude"
 hermes_gateway_plugin_dir: "{{ hermes_pins.install.hermes_home }}/plugins/{{ hermes_pins.model.plugin.install_name }}"
 hermes_gateway_manifest_script: /usr/local/share/hermes/plugin-manifest.sh
+
+# The loopback backend that Hermes Desktop attaches to (through an SSH tunnel), and its token.
+hermes_gateway_serve_port: 9119
+hermes_gateway_serve_token: /etc/hermes-dashboard/session-token

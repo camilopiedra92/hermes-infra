@@ -89,6 +89,20 @@ Secrets are never in git, never printed, and files holding them are mode 0600.
 3. **Revoke:** rotate every credential in the table above that the compromised bot could reach.
 4. **Restore:** from the last good backup, then reopen the channel.
 
+## Hermes Desktop
+
+The Desktop app attaches to `hermes-serve.service`, a user unit of the admin account that listens on `127.0.0.1:9119` only
+(`--tags serve`). No port is opened on the tailnet. The path in is an SSH tunnel over Tailscale SSH, so the real
+authentication is the owner's Tailscale identity; the dashboard token is the second factor.
+
+```sh
+ssh -N -L 9119:127.0.0.1:9119 hermesops@hermes          # keep it open
+ssh hermesops@hermes sudo cat /etc/hermes-dashboard/session-token   # the token, once
+```
+
+In Desktop: Settings, Gateways, Add, Remote gateway, URL `http://127.0.0.1:9119`, authentication Session token. Rotate by
+deleting `/etc/hermes-dashboard/session-token`, applying `--tags serve`, restarting `hermes-serve` and pasting the new one.
+
 ## Worker (tier 1)
 
 - Images are loaded offline: `podman save` as the admin, `podman load` as the worker. The worker has no registry egress.

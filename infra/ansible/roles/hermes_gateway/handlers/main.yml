@@ -1,0 +1,5 @@
+---
+- name: Reload user units
+  ansible.builtin.command:
+    argv: [systemctl, --user, "--machine={{ hermes_pins.state.owner }}@.host", daemon-reload]
+  changed_when: true
