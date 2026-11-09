@@ -100,6 +100,7 @@ nftables); nothing is reachable from the internet.
 | --- | --- | --- | --- | --- |
 | Admin bot | `hermes-serve` (`hermes`) | 9119 | `https://<host>.<tailnet>.ts.net` | `/etc/hermes-dashboard` |
 | Worker bots | `hermes-worker-serve` (`hermesworker`) | 9120 | `https://<host>.<tailnet>.ts.net:8443` | `/etc/hermes-worker-dashboard` |
+| Assistant bots | `hermes-assistant-serve` (`hermesassistant`) | 9121 | `https://<host>.<tailnet>.ts.net:8444` | `/etc/hermes-assistant-dashboard` |
 
 In Desktop: Settings, Gateways, Add connection, Remote gateway, the URL, then sign in with user `camilo` and the generated
 password. Read a password once: `ssh hermesops@hermes sudo cat <login files>/password`. Only its scrypt hash and a signing secret
