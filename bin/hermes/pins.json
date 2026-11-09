@@ -105,7 +105,8 @@
         "connections",
         "catalog",
         "cronjob"
-      ]
+      ],
+      "ask_helper": true
     },
     "assistant": {
       "user": "hermesassistant",
@@ -193,7 +194,28 @@
     "host": "127.0.0.1",
     "port": 22,
     "key": "/home/hermes/.ssh/hermes-admin",
-    "comment": "hermes-bot-admin"
+    "comment": "hermes-bot-admin",
+    "egress": {
+      "proxy_port": 8891,
+      "domains": [
+        "github.com",
+        "api.github.com",
+        "codeload.github.com",
+        "objects.githubusercontent.com",
+        "raw.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "registry-1.docker.io",
+        "auth.docker.io",
+        "production.cloudflare.docker.com",
+        "api.hetzner.cloud",
+        "api.cloudflare.com",
+        "api.tailscale.com",
+        "login.tailscale.com",
+        "hermes-agent.nousresearch.com"
+      ]
+    }
   },
   "sandbox": {
     "image": {

@@ -1,0 +1,19 @@
+---
+- name: Load the egress rule of the administration account
+  ansible.builtin.command: /usr/sbin/nft -f /etc/nftables.d/25-hermes-ops.nft
+  changed_when: true
+
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Restart the proxy of the administration account
+  ansible.builtin.systemd_service:
+    name: tinyproxy-ops.service
+    state: restarted
+  when: not ansible_check_mode
+
+- name: Reload sshd
+  ansible.builtin.systemd_service:
+    name: ssh
+    state: reloaded

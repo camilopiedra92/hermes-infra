@@ -1,0 +1,5 @@
+# {{ ansible_managed }}
+# The sessions of the administration account reach the internet through its own proxy. The variables are set by sshd, not by
+# the account, so the agent starts every command with them; a command that ignores them meets the nftables hold.
+Match User {{ hermes_pins.admin.user }}
+    SetEnv HTTPS_PROXY=http://{{ admin_egress_proxy_address }}:{{ hermes_pins.admin.egress.proxy_port }} https_proxy=http://{{ admin_egress_proxy_address }}:{{ hermes_pins.admin.egress.proxy_port }} NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1

@@ -1,0 +1,66 @@
+---
+- name: Load the Hermes pins
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../../bin/hermes/pins.json"
+    name: hermes_pins
+  tags: [always]
+
+- name: Install the proxy configuration
+  ansible.builtin.template:
+    src: tinyproxy-ops.conf.j2
+    dest: /etc/tinyproxy/tinyproxy-ops.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart the proxy of the administration account
+
+- name: Install the list of names the administration account may reach
+  ansible.builtin.template:
+    src: tinyproxy-ops-allow.filter.j2
+    dest: /etc/tinyproxy/hermes-ops-allow.filter
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart the proxy of the administration account
+
+- name: Install the proxy unit
+  ansible.builtin.template:
+    src: tinyproxy-ops.service.j2
+    dest: /etc/systemd/system/tinyproxy-ops.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart the proxy of the administration account
+
+- name: Apply the unit and the proxy before the account is held
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the proxy
+  ansible.builtin.systemd_service:
+    name: tinyproxy-ops.service
+    enabled: true
+    state: started
+  when: not ansible_check_mode
+
+- name: Point the sessions of the account at its proxy
+  ansible.builtin.template:
+    src: sshd-ops-proxy.conf.j2
+    dest: /etc/ssh/sshd_config.d/62-hermes-ops-proxy.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload sshd
+
+# Last: with the proxy up and the sessions pointed at it, hold the account.
+- name: Hold the administration account behind its proxy (fail closed)
+  ansible.builtin.template:
+    src: ops.nft.j2
+    dest: /etc/nftables.d/25-hermes-ops.nft
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/nft -c -f %s
+  notify: Load the egress rule of the administration account

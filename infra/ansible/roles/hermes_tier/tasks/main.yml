@@ -378,3 +378,14 @@
   ansible.builtin.import_tasks: serve.yml
   when: hermes_tier_def.serve_port is defined
   tags: [serve, never]
+
+# The admin agent asks the worker to read what the admin agent must not read itself (docs/ARCHITECTURE.md).
+- name: Install the helper that lets the administration account ask the tier
+  ansible.builtin.template:
+    src: hermes-ask-tier.j2
+    dest: "/usr/local/bin/hermes-ask-{{ hermes_tier_name }}"
+    owner: root
+    group: "{{ hermes_pins.admin.user }}"
+    mode: "0750"
+    validate: sh -n %s
+  when: hermes_tier_def.ask_helper | default(false)
