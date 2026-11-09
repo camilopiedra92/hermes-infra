@@ -18,7 +18,8 @@
     that:
       - ansible_facts['getent_passwd'][operator_user] is defined
       - ansible_facts['getent_passwd'][operator_user][4] == operator_home
-    fail_msg: "User {{ operator_user }} must exist with home {{ operator_home }} before it is given root."
+    fail_msg: >-
+      User {{ operator_user }} must exist with home {{ operator_home }} before it is given root.
   when: not ansible_check_mode or (ansible_facts['getent_passwd'][operator_user] is defined)
 
 - name: Check whether root was closed by hand
@@ -45,8 +46,8 @@
     state: absent
   when: operator_off.stat.exists
 
-# The owner delivers the GitHub token here with `sudo hermes-secret-put GITHUB_TOKEN` (0600, this account). The role creates
-# the directory and never writes the token.
+# The owner delivers the GitHub token here with `sudo hermes-secret-put GITHUB_TOKEN` (0600, this account).
+# The role creates the directory and never writes the token.
 - name: Create the directory of the delivered GitHub token
   ansible.builtin.file:
     path: "{{ operator_home }}/.config/hermes"
