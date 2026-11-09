@@ -45,6 +45,8 @@
   loop:
     - hermes-backup.service
     - hermes-backup.timer
+    - hermes-restore-drill.service
+    - hermes-restore-drill.timer
   notify: Reload systemd
 
 - name: Apply the unit files before they are enabled
@@ -53,5 +55,11 @@
 - name: Enable the timer
   ansible.builtin.systemd_service:
     name: hermes-backup.timer
+    enabled: true
+    state: started
+
+- name: Enable the restore drill timer
+  ansible.builtin.systemd_service:
+    name: hermes-restore-drill.timer
     enabled: true
     state: started

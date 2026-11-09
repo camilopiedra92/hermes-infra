@@ -15,10 +15,12 @@ from pathlib import Path
 
 OUT = Path("/var/lib/hermes-health/status.json")
 BACKUP_STATUS = Path("/var/lib/hermes-backup/status.json")
+DRILL_STATUS = Path("/var/lib/hermes-backup/drill.json")
 STATE_MOUNT = "/home/hermes/.hermes"
 # Agent tiers as "name:account" pairs, written by Ansible from bin/hermes/pins.json.
 TIERS = [tuple(pair.split(":", 1)) for pair in os.environ.get("HERMES_TIERS", "").split(",") if pair]
 BACKUP_MAX_AGE = 26 * 3600
+DRILL_MAX_AGE = 40 * 24 * 3600  # monthly, with a week of slack
 DISK_WARN = 0.85
 MEM_MIN_MB = 300
 
@@ -69,6 +71,16 @@ def main() -> None:
             problems.append("the backup repository is close to the R2 free tier")
     except (OSError, ValueError, KeyError):
         problems.append("there is no backup status yet")
+
+    try:
+        drill = json.loads(DRILL_STATUS.read_text(encoding="utf-8"))
+        info["restore_drill_age_days"] = round((time.time() - drill["finished"]) / 86400, 1)
+        if not drill.get("ok"):
+            problems.append("the last restore drill failed: " + "; ".join(drill.get("problems", ["unknown"])))
+        elif time.time() - drill["finished"] > DRILL_MAX_AGE:
+            problems.append("the last good restore drill is more than 40 days old")
+    except (OSError, ValueError, KeyError):
+        problems.append("there is no restore drill yet")
 
     volumes = [("root disk", "/"), ("state volume", STATE_MOUNT)]
     volumes += [(f"{name} state volume", f"/home/{account}/.hermes") for name, account in TIERS]

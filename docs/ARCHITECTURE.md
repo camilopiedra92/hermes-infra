@@ -79,7 +79,7 @@ Workers think with the owner's Claude subscription and act in a container, and t
 
 - Configuration: this repository.
 - State: restic to a Cloudflare R2 bucket (free tier), client-side encrypted, daily, 14 daily / 8 weekly / 6 monthly,
-  database copies taken through the SQLite backup API, restore drill monthly. Secrets and the Claude login are never
+  database copies taken through the SQLite backup API, an automated monthly restore drill that the health collector watches. Secrets and the Claude login are never
   backed up; the Claude login is renewed by the owner.
 - Server: protected against deletion; rebuilding is a deliberate owner action from the Hetzner console.
 

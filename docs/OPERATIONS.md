@@ -53,11 +53,14 @@ password manager; without it a backup cannot be opened.
 sudo systemctl start hermes-backup.service                 # now
 sudo cat /var/lib/hermes-backup/status.json                # last result
 sudo bash -c 'set -a; . /etc/hermes-backup/restic.env; set +a; restic snapshots'
-# restore drill (monthly): restore to a scratch directory, never over live state
-sudo bash -c 'set -a; . /etc/hermes-backup/restic.env; set +a; restic restore latest --target /var/tmp/restore'
+sudo systemctl start hermes-restore-drill.service          # restore drill now (it runs monthly on its own)
+sudo cat /var/lib/hermes-backup/drill.json                 # last drill
 ```
 
-Check every `*.db` under the restored tree with `PRAGMA integrity_check`, then delete the scratch directory. A real
+The restore drill (`hermes-restore-drill.timer`, the 1st of each month) restores the latest snapshot into a scratch directory,
+checks that the state of the admin and of every tier is in it, runs `PRAGMA integrity_check` on every database, fails if any
+secret file (`.env`, `auth.json`, a Claude login, restic credentials) is inside, and deletes the scratch directory. The health
+collector reports a failed drill, or one older than 40 days. A real
 restore stops the affected gateway, restores into its state directory, fixes ownership, starts it, and the owner logs in to
 Claude again (logins are single-use and never backed up).
 
