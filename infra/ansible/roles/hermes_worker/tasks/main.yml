@@ -128,7 +128,9 @@
     mode: "0755"
   when: not ansible_check_mode
 
+# Every tagged slice below needs it, so it carries their tags. Plans without a worker (CI) must not run it.
 - name: Read the account of the worker
+  tags: [worker, image, serve, persona]
   ansible.builtin.getent:
     database: passwd
     key: "{{ hermes_worker_user }}"
@@ -144,8 +146,8 @@
     mode: "0755"
 
 - name: Install the managed policy of the worker
-  ansible.builtin.copy:
-    src: managed-config.yaml
+  ansible.builtin.template:
+    src: managed-config.yaml.j2
     dest: "{{ hermes_worker_managed_dir }}/config.yaml"
     owner: root
     group: root
@@ -305,6 +307,10 @@
 
 - name: Apply the egress rule before the gateway can start
   ansible.builtin.meta: flush_handlers
+
+- name: Load the container image of the worker (offline)
+  ansible.builtin.import_tasks: image.yml
+  tags: [image]
 
 - name: Enable the worker gateway at boot and keep it running
   ansible.builtin.systemd_service:

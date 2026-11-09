@@ -108,7 +108,14 @@ are in `<login files>/serve.env` (readable by the service group). Rotate by dele
 
 ## Worker (tier 1)
 
-- Images are loaded offline: `podman save` as the admin, `podman load` as the worker. The worker has no registry egress.
+- The container image is pinned in `bin/hermes/pins.json` (`worker.image`): the registry digest of the linux/amd64 manifest
+  and the image ID. The role `hermes_worker` (`--tags image`) loads it only when the worker lacks it: the admin runs
+  `podman pull <repository>@<digest>`, then streams `podman save` into the worker's `podman load` through
+  `systemd-run --user`. The worker has no registry egress. The managed policy names the image by ID.
+- **Upgrade the image:** read the new amd64 manifest digest from the registry index (`/v2/library/python/manifests/<tag>`,
+  platform linux/amd64), pull it as the admin, read `podman image inspect --format '{{.Id}}'`, put both values in
+  `worker.image` and open a pull request. Apply with `--check --diff`, then `--tags image,worker`. The policy change restarts
+  the worker gateway. Check a container with `--network none --read-only --memory --pids-limit` and no Hermes name or label.
 - Test containers with the worker's user manager, never plain `sudo -u`, and never with Hermes names or labels
   (`systemd-run --user --pipe --wait`).
 - The worker's Claude login is interactive: run `claude auth login` with stdin from a FIFO, give the owner the URL, write the

@@ -95,6 +95,14 @@
     },
     "reasoning_effort": "medium"
   },
+  "worker": {
+    "image": {
+      "repository": "docker.io/library/python",
+      "tag": "3.14-slim",
+      "digest": "sha256:ac25e5afbfdb4a94ff99cc24b0345719210133144481480bcba6085efa36a341",
+      "id": "sha256:d8f0d5177291a2af21536287c48e3d17fea2d6bff80436c9bd206dd505b29e52"
+    }
+  },
   "admin": {
     "user": "hermesadmin",
     "uid": 1002,

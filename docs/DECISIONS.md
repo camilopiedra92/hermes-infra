@@ -46,3 +46,7 @@ entry is rewritten, not kept as history (git has the history).
     published by Tailscale Serve on its own HTTPS port (443, 8443) with its own sign-in, and the owner registers both as
     gateways. Bots of the same tier are profiles of that tier's instance. Putting a worker bot into the admin instance as a
     profile was rejected: profiles share one Linux account, so it would share the admin's credentials and host access.
+16. **The worker image is pinned by digest, and runs by image ID.** The admin pulls `python@sha256:<amd64 manifest>` and the
+    worker loads it offline (it has no registry egress). A save and load recompress the layers, so a registry digest cannot
+    survive the transfer; the image ID (the sha256 of the image config, which covers every layer) does, and the load checks it.
+    Both values live in `bin/hermes/pins.json`; the policy names the ID, so Hermes never tries to pull.
