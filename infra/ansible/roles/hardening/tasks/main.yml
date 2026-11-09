@@ -6,12 +6,7 @@
     owner: root
     group: root
     mode: "0644"
-  register: hardening_sysctl
-
-- name: Load the hardening
-  ansible.builtin.command: sysctl --system
-  when: hardening_sysctl is changed
-  changed_when: true
+  notify: Load the sysctl hardening
 
 - name: Keep unused network protocols from loading
   ansible.builtin.copy:
@@ -29,18 +24,7 @@
     group: root
     mode: "0644"
     validate: /usr/sbin/sshd -t -f %s
-  register: hardening_sshd
-
-- name: Check the effective SSH configuration before reloading
-  ansible.builtin.command: /usr/sbin/sshd -t
-  when: hardening_sshd is changed
-  changed_when: false
-
-- name: Reload SSH
-  ansible.builtin.systemd_service:
-    name: ssh
-    state: reloaded
-  when: hardening_sshd is changed
+  notify: Reload SSH
 
 - name: Install the reboot window units
   ansible.builtin.template:
@@ -52,12 +36,7 @@
   loop:
     - hermes-reboot-window.service
     - hermes-reboot-window.timer
-  register: hardening_units
-
-- name: Reload systemd
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-  when: hardening_units is changed
+  notify: Reload systemd
 
 - name: Enable the reboot window timer
   ansible.builtin.systemd_service:

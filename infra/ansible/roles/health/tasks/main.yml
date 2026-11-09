@@ -26,12 +26,10 @@
   loop:
     - hermes-health.service
     - hermes-health.timer
-  register: health_units
+  notify: Reload systemd
 
-- name: Reload systemd
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-  when: health_units is changed
+- name: Apply the unit files before they are enabled
+  ansible.builtin.meta: flush_handlers
 
 - name: Enable the collector timer
   ansible.builtin.systemd_service:

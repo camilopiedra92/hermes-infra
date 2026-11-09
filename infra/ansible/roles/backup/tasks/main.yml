@@ -39,12 +39,10 @@
   loop:
     - hermes-backup.service
     - hermes-backup.timer
-  register: backup_units
+  notify: Reload systemd
 
-- name: Reload systemd
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-  when: backup_units is changed
+- name: Apply the unit files before they are enabled
+  ansible.builtin.meta: flush_handlers
 
 - name: Enable the timer
   ansible.builtin.systemd_service:
