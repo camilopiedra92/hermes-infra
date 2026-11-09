@@ -324,6 +324,7 @@
 # One identity for the owner across bots: the worker starts from the owner's profile as the admin agent knows it.
 # Seeded once and never overwritten, because the worker keeps learning on its own.
 - name: Create the memory directory of the worker
+  tags: [persona]
   ansible.builtin.file:
     path: "{{ hermes_worker_hermes_home }}/memories"
     state: directory
@@ -332,10 +333,32 @@
     mode: "0700"
 
 - name: Seed the owner profile of the worker from the admin agent (only when absent)
+  tags: [persona]
   ansible.builtin.copy:
     src: /home/hermes/.hermes/memories/USER.md
     dest: "{{ hermes_worker_hermes_home }}/memories/USER.md"
     remote_src: true
+    owner: "{{ hermes_worker_user }}"
+    group: "{{ hermes_worker_user }}"
+    mode: "0600"
+    force: false
+
+# The identity is the operator's: the repository owns SOUL.md and resets it, so a poisoned write cannot stick.
+- name: Install the persona of the worker
+  tags: [persona]
+  ansible.builtin.copy:
+    src: SOUL.md
+    dest: "{{ hermes_worker_hermes_home }}/SOUL.md"
+    owner: "{{ hermes_worker_user }}"
+    group: "{{ hermes_worker_user }}"
+    mode: "0600"
+
+# Starting memory, seeded once: the worker curates it from then on.
+- name: Seed the memory of the worker (only when absent)
+  tags: [persona]
+  ansible.builtin.copy:
+    src: MEMORY.md
+    dest: "{{ hermes_worker_hermes_home }}/memories/MEMORY.md"
     owner: "{{ hermes_worker_user }}"
     group: "{{ hermes_worker_user }}"
     mode: "0600"
