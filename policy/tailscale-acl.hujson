@@ -67,7 +67,12 @@
 		{
 			"src":    "tag:hermes-ops",
 			"accept": ["tag:hermes-prod:22"],
-			"deny":   ["tag:hermes-prod:80", "tag:hermes-prod:443", "tag:hermes-prod:8443", "tag:hermes-prod:5432"],
+			"deny": [
+				"tag:hermes-prod:80",
+				"tag:hermes-prod:443",
+				"tag:hermes-prod:8443",
+				"tag:hermes-prod:5432",
+			],
 		},
 		{
 			"src":  "tag:hermes-prod",
