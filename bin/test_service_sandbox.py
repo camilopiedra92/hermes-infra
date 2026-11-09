@@ -49,7 +49,7 @@ class AttackSurfaceTests(unittest.TestCase):
     def test_unused_image_services_are_purged_and_container_auto_update_is_masked(self) -> None:
         defaults = text("hardening", "defaults", "main.yml")
         for package in ("snapd", "open-iscsi", "multipath-tools", "open-vm-tools", "apport", "pollinate", "lxd-installer"):
-            self.assertRegex(defaults, rf"^\s+- {package}$", package)
+            self.assertRegex(defaults, re.compile(rf"^\s+- {package}$", re.M), package)
         tasks = text("hardening", "tasks", "main.yml")
         self.assertIn("purge: true", tasks)
         for unit in ("podman-auto-update.timer", "podman-restart.service"):
