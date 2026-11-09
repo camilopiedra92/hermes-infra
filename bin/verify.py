@@ -320,10 +320,6 @@ def main() -> int:
     if run(["git", "status", "--porcelain"], capture=True).stdout.strip():
         return fail("working tree is not clean; the gate must run on a committed tree")
 
-    health = ROOT / "bin" / "host-health.py"
-    if health.stat().st_mode & 0o111 == 0:
-        return fail("bin/host-health.py is not executable")
-
     test_files = sorted((ROOT / "bin").glob("test_*.py"))
     if not test_files:
         return fail("missing bin/test_*.py")

@@ -1,6 +1,6 @@
 ---
 # The account, the key path and the address live in bin/hermes/pins.json (admin), because the
-# nftables rule, the egress test and host-health must agree with them. tasks/main.yml loads that file.
+# nftables rule, and the egress test must agree with them. tasks/main.yml loads that file.
 
 bot_admin_sudo_logfile: /var/log/sudo-hermesops.log
 bot_admin_sudoers_path: /etc/sudoers.d/92-hermesadmin
