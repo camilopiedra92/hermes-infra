@@ -108,5 +108,7 @@ A change that can cut access arms a dead-man timer first. No CI job has a path t
 
 ## Observability
 
-systemd unit failures, backup status, disk, memory, pending updates and certificate-free health checks run from a
-timer and report to Telegram. An external heartbeat (Healthchecks free tier) detects a dead host.
+systemd unit failures, backup status, restore drills, disk, memory, pending updates and certificate-free health checks run from a
+timer and report to Telegram. The same collector compares the live host with a manifest rendered from the repository (nftables
+tables, `hermes-*` and `tinyproxy-*` units, accounts, ports open to the network) and reports drift in either direction, so state
+that nobody wrote down cannot linger. An external heartbeat (Healthchecks free tier) detects a dead host.

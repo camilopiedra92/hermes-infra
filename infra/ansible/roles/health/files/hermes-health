@@ -16,6 +16,8 @@ from pathlib import Path
 OUT = Path("/var/lib/hermes-health/status.json")
 BACKUP_STATUS = Path("/var/lib/hermes-backup/status.json")
 DRILL_STATUS = Path("/var/lib/hermes-backup/drill.json")
+EXPECTED = Path("/etc/hermes-health/expected-state.json")
+UNIT_DIR = Path("/etc/systemd/system")
 STATE_MOUNT = "/home/hermes/.hermes"
 # Agent tiers as "name:account" pairs, written by Ansible from bin/hermes/pins.json.
 TIERS = [tuple(pair.split(":", 1)) for pair in os.environ.get("HERMES_TIERS", "").split(",") if pair]
@@ -27,6 +29,40 @@ MEM_MIN_MB = 300
 
 def run(*cmd: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+
+
+def drift(problems: list[str], info: dict[str, object]) -> None:
+    """Compare what the host runs with what the repository declares. Anything extra is state nobody wrote down."""
+    try:
+        expected = json.loads(EXPECTED.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        problems.append("there is no expected-state manifest to compare the host with")
+        return
+    found: dict[str, tuple[set[str], set[str]]] = {}
+
+    tables = {" ".join(line.split()[1:3]) for line in run("nft", "list", "tables").stdout.splitlines() if line.startswith("table ")}
+    found["nftables table"] = (tables, set(expected["nft_tables"]))
+
+    units = {path.name for path in UNIT_DIR.iterdir() if path.is_file() and path.name.startswith(tuple(expected["unit_prefixes"]))}
+    found["system unit"] = (units, set(expected["system_units"]))
+
+    accounts = {line.split(":")[0] for line in run("getent", "passwd").stdout.splitlines() if 1000 <= int(line.split(":")[2]) < 65000}
+    found["account"] = (accounts, set(expected["accounts"]))
+
+    open_ports = set()
+    for line in run("ss", "-ltnH").stdout.splitlines():
+        local = line.split()[3]
+        host, _, port = local.rpartition(":")
+        if not host.startswith(("127.", "[::1]", "::1")) and "%" not in host and not host.startswith(("100.", "[fd7a:")):
+            open_ports.add(port)
+    found["port open to the network"] = (open_ports, {str(port) for port in expected["network_ports"]})
+
+    info["drift_checks"] = sum(len(live) for live, _ in found.values())
+    for label, (live, wanted) in found.items():
+        for extra in sorted(live - wanted):
+            problems.append(f"drift: {label} {extra} is on the host and not in the repository")
+        for missing in sorted(wanted - live):
+            problems.append(f"drift: {label} {missing} is in the repository and not on the host")
 
 
 def active(unit: str, user: str | None = None) -> bool:
@@ -82,6 +118,8 @@ def main() -> None:
             problems.append("the last good restore drill is more than 40 days old")
     except (OSError, ValueError, KeyError):
         problems.append("there is no restore drill yet")
+
+    drift(problems, info)
 
     volumes = [("root disk", "/"), ("state volume", STATE_MOUNT)]
     volumes += [(f"{name} state volume", f"/home/{account}/.hermes") for name, account in TIERS]

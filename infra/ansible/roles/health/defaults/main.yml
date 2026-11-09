@@ -1,0 +1,21 @@
+---
+# What the repository declares to exist on the host. The collector compares the live host with this manifest, so state
+# nobody wrote down (a table of an old design, a stray unit, an extra account, an open port) is reported.
+health_tier_names: "{{ hermes_pins.tiers.keys() | list }}"
+health_expected_state:
+  # Tables owned by Tailscale (iptables-nft) and by this repository.
+  nft_tables: >-
+    {{ ['ip filter', 'ip nat', 'ip mangle', 'ip6 filter', 'ip6 nat', 'ip6 mangle',
+        'inet hermes_filter', 'inet ' ~ hermes_pins.egress.nft.table, 'inet hermes_ops']
+       + (health_tier_names | map('regex_replace', '^', 'inet hermes_') | list) }}
+  unit_prefixes: [hermes-, tinyproxy]
+  system_units: >-
+    {{ ['hermes-backup.service', 'hermes-backup.timer', 'hermes-restore-drill.service', 'hermes-restore-drill.timer',
+        'hermes-health.service', 'hermes-health.timer', 'hermes-reboot-window.service', 'hermes-reboot-window.timer',
+        'hermes-sudo-io-prune.service', 'hermes-sudo-io-prune.timer', 'tinyproxy-ops.service']
+       + (health_tier_names | map('regex_replace', '^', 'tinyproxy-') | map('regex_replace', '$', '.service') | list) }}
+  accounts: >-
+    {{ ['hermesops', hermes_pins.admin.user, hermes_pins.state.owner]
+       + (hermes_pins.tiers.values() | map(attribute='user') | list) }}
+  # Only ssh listens on every interface; the rest is loopback or the tailnet interface.
+  network_ports: [22]
