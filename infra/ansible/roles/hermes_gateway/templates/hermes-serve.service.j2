@@ -25,27 +25,7 @@ MemoryHigh=768M
 MemoryMax=1G
 TasksMax=512
 LimitCORE=0
-# Sandbox. The admin backend never starts a container (its terminal is the SSH backend), so it can run without privilege
-# escalation. The sandbox tiers cannot: rootless Podman needs the setuid newuidmap, and in a user manager every namespace
-# or seccomp option implies NoNewPrivileges. Capability-dropping options (PrivateDevices, ProtectClock, ProtectKernel*)
-# need a privileged manager and fail here.
-NoNewPrivileges=true
-ProtectSystem=strict
-ReadWritePaths={{ hermes_pins.state.mount | dirname }}
-PrivateTmp=true
-ProtectKernelTunables=true
-ProtectControlGroups=true
-ProtectProc=invisible
-ProcSubset=pid
-RestrictNamespaces=true
-RestrictRealtime=true
-RestrictSUIDSGID=true
-LockPersonality=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-SystemCallArchitectures=native
-SystemCallFilter=@system-service
-SystemCallFilter=~@mount @debug @module @reboot @swap @obsolete @raw-io @cpu-emulation
-UMask=0077
+# No systemd sandbox options in a user unit: they run the service in a user namespace, where root-owned files (the SSH config of the terminal backend) appear as nobody and ssh refuses them.
 
 [Install]
 WantedBy=default.target

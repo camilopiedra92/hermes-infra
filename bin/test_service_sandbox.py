@@ -1,4 +1,4 @@
-"""Service sandboxing: root services share one sandbox; the admin backend drops privilege escalation; sandbox tiers cannot."""
+"""Service sandboxing: root services share one sandbox; user units carry no systemd sandbox."""
 
 from __future__ import annotations
 
@@ -61,22 +61,27 @@ class AttackSurfaceTests(unittest.TestCase):
         self.assertNotIn("update-notifier-common", text("hardening", "defaults", "main.yml"))
 
 
+FORBIDDEN_IN_USER_UNITS = (
+    "NoNewPrivileges", "ProtectSystem", "ProtectHome", "PrivateTmp", "PrivateDevices", "ProtectProc", "ProcSubset",
+    "ReadWritePaths", "RestrictNamespaces", "SystemCallFilter", "ProtectClock", "ProtectKernelModules",
+    "ProtectKernelLogs", "ProtectKernelTunables", "ProtectControlGroups", "CapabilityBoundingSet",
+)
+
+
 class UserUnitSandboxTests(unittest.TestCase):
-    def test_the_admin_backend_runs_without_privilege_escalation(self) -> None:
-        unit = text("hermes_gateway", "templates", "hermes-serve.service.j2")
-        for line in ("NoNewPrivileges=true", "ProtectSystem=strict", "PrivateTmp=true", "RestrictNamespaces=true"):
-            self.assertIn(line, unit)
-
-    def test_units_that_launch_rootless_podman_never_set_no_new_privileges(self) -> None:
-        # Podman needs the setuid newuidmap. The drop-in of the gateway is shared by every tier, so it cannot carry it either.
-        for owner, name in (("hermes_tier", "hermes-tier-serve.service.j2"), ("hermes_gateway", "gateway-limits.conf.j2")):
-            self.assertNotIn("NoNewPrivileges=", "\n".join(
-                line for line in text(owner, "templates", name).splitlines() if not line.startswith("#")))
-
-    def test_capability_dropping_options_stay_out_of_user_units(self) -> None:
-        unit = text("hermes_gateway", "templates", "hermes-serve.service.j2")
-        for option in ("PrivateDevices", "ProtectClock", "ProtectKernelModules", "ProtectKernelLogs", "CapabilityBoundingSet"):
-            self.assertNotRegex(unit, rf"^{option}=", f"{option} fails in an unprivileged user manager")
+    def test_user_units_carry_no_systemd_sandbox_option(self) -> None:
+        for owner, name in (
+            ("hermes_gateway", "hermes-serve.service.j2"),
+            ("hermes_tier", "hermes-tier-serve.service.j2"),
+            ("hermes_gateway", "gateway-limits.conf.j2"),
+        ):
+            active = [line.strip() for line in text(owner, "templates", name).splitlines() if not line.lstrip().startswith("#")]
+            for option in FORBIDDEN_IN_USER_UNITS:
+                self.assertFalse(
+                    [line for line in active if line.startswith(f"{option}=")],
+                    f"{name} sets {option}: in a user manager it runs the service in a user namespace, which maps "
+                    "root-owned files to nobody (ssh refuses its config), and rootless Podman needs the setuid newuidmap",
+                )
 
 
 if __name__ == "__main__":
