@@ -106,6 +106,56 @@
         "catalog",
         "cronjob"
       ]
+    },
+    "assistant": {
+      "user": "hermesassistant",
+      "proxy_port": 8890,
+      "extra_domains": [
+        "api.keenable.ai",
+        "ai.todoist.net",
+        "todoist.com",
+        "calendarmcp.googleapis.com",
+        "accounts.google.com",
+        "oauth2.googleapis.com"
+      ],
+      "sandbox": false,
+      "state_bytes": 2147483648,
+      "state_inodes": 131072,
+      "slice_memory_max": "1G",
+      "toolsets": [
+        "web",
+        "clarify",
+        "memory",
+        "session_search",
+        "skills",
+        "cronjob",
+        "mcp-todoist",
+        "mcp-google_calendar"
+      ],
+      "disabled_toolsets": [
+        "terminal",
+        "file",
+        "code_execution",
+        "browser",
+        "delegation",
+        "computer_use",
+        "image_gen",
+        "video_gen",
+        "tts",
+        "kanban",
+        "connections",
+        "catalog"
+      ],
+      "mcp_servers": {
+        "todoist": {
+          "url": "https://ai.todoist.net/mcp",
+          "oauth_client": false
+        },
+        "google_calendar": {
+          "url": "https://calendarmcp.googleapis.com/mcp/v1",
+          "oauth_client": true
+        }
+      }
     }
   },
   "model": {

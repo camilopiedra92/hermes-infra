@@ -13,7 +13,8 @@ hermes_tier_managed_dir: "/etc/hermes-{{ hermes_tier_name }}"
 hermes_tier_claude_config_dir: "{{ hermes_tier_home }}/.claude"
 hermes_tier_plugin_dir: "{{ hermes_tier_hermes_home }}/plugins/{{ hermes_pins.model.plugin.install_name }}"
 hermes_tier_gateway_unit: hermes-gateway.service
-hermes_tier_uid: "{{ ansible_facts['getent_passwd'][hermes_tier_user][1] }}"
+# Absent only in a check run that precedes the creation of the account; an apply creates it before this is read.
+hermes_tier_uid: "{{ (ansible_facts['getent_passwd'][hermes_tier_user] | default(['', '0'], true))[1] }}"
 hermes_tier_as_user:
   - sudo
   - -u
