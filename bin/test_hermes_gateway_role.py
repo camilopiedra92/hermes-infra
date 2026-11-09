@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import unittest
@@ -79,14 +80,21 @@ class RoleTests(unittest.TestCase):
         self.assertIn("tags: [gateway]", site)
         self.assertLess(site.index("role: service_user"), site.index("role: hermes_gateway"))
 
-    def test_the_role_holds_no_secret_and_never_starts_the_gateway(self) -> None:
+    def test_the_role_holds_no_secret_value(self) -> None:
+        shapes = (r"\d{6,12}:[A-Za-z0-9_-]{30,}", r"tskey-", r"sk-ant-", r"github_pat_", r"cfat_", r"[0-9a-f]{64}")
         for path in ROLE.rglob("*"):
-            # briefing.md is prose for the bot and names "the bot token" without holding one. test_hermes_briefing.py checks it
-            # for real secret shapes (bot tokens, Tailscale and Anthropic keys, long numbers), which a word match cannot do.
-            if path.is_file() and path.name != "briefing.md":
-                text = path.read_text(encoding="utf-8").lower()
-                for word in ("token", "api_key", "password", "enable --now"):
-                    self.assertNotIn(word, text, f"{path.relative_to(ROLE)}: {word}")
+            if path.is_file():
+                text = path.read_text(encoding="utf-8")
+                for shape in shapes:
+                    self.assertIsNone(re.search(shape, text), f"{path.relative_to(ROLE)}: {shape}")
+
+    def test_no_play_starts_the_admin_gateway(self) -> None:
+        # The terminal tool of the gateway blocks it, and a restart belongs to the operator (docs/OPERATIONS.md).
+        unit = PINS["gateway"]["unit"]
+        for path in ROLE.rglob("*.yml"):
+            text = path.read_text(encoding="utf-8")
+            self.assertNotRegex(text, rf"name: .*{re.escape(unit)}[^\n]*\n(?:[^\n]*\n){{0,6}}?\s+state: (started|restarted)", str(path))
+            self.assertNotIn("enable --now", text)
 
 
 if __name__ == "__main__":
