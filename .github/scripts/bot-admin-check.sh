@@ -48,7 +48,7 @@ install -d -m 0700 -o hermesadmin -g hermesadmin /home/hermesadmin/.config/herme
 printf 'github_pat_ci_canary\n' >/home/hermesadmin/.config/hermes/github-token
 chown hermesadmin:hermesadmin /home/hermesadmin/.config/hermes/github-token
 chmod 0600 /home/hermesadmin/.config/hermes/github-token
-as_admin() { sudo -u hermesadmin -H env -i HOME=/home/hermesadmin PATH=/usr/local/bin:/usr/bin:/bin GIT_TERMINAL_PROMPT=0 "$@"; }
+as_admin() { (cd /home/hermesadmin && sudo -u hermesadmin -H env -i HOME=/home/hermesadmin PATH=/usr/local/bin:/usr/bin:/bin GIT_TERMINAL_PROMPT=0 "$@"); }
 GOT=$(printf 'protocol=https\nhost=github.com\n\n' | as_admin git credential fill)
 grep -qx 'password=github_pat_ci_canary' <<<"$GOT" || fail "git does not get the delivered token for github.com"
 if printf 'protocol=https\nhost=example.com\n\n' | as_admin git credential fill >/dev/null 2>&1; then
