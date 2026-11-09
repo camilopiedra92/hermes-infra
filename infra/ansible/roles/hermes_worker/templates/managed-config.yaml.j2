@@ -1,3 +1,4 @@
+# {{ ansible_managed }}
 # Hermes managed scope for the tier-1 worker (docs/ARCHITECTURE.md). Owned by root in /etc/hermes-worker.
 # The worker reads untrusted content and holds no credential: its tools run in a rootless container, never on the host.
 
@@ -52,7 +53,9 @@ agent:
 # Extra run flags would only duplicate or collide with those.
 terminal:
   backend: docker
-  docker_image: docker.io/library/python:3.14-slim
+  # The image is pinned by content: its ID is the sha256 of its config, which covers every layer (bin/hermes/pins.json).
+  # Hermes pulls an image only when it is absent locally, and the worker has no registry egress, so it never pulls.
+  docker_image: "{{ hermes_worker_image_id }}"
   docker_network: false
   container_cpu: 1
   container_memory: 1024

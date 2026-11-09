@@ -36,3 +36,22 @@ hermes_worker_serve_dir: /etc/hermes-worker-dashboard
 hermes_worker_serve_user: camilo
 hermes_worker_serve_unit: hermes-worker-serve.service
 hermes_worker_claude_binary: "{{ hermes_pins.model.cli.root }}/{{ hermes_pins.model.cli.version }}/package/claude"
+
+# The container image of the worker, pinned in bin/hermes/pins.json. The admin pulls it by registry digest; the worker
+# loads it offline and runs it by image ID (a save and load cannot keep a registry digest: the layers are recompressed).
+hermes_worker_image_pull: "{{ hermes_pins.worker.image.repository }}@{{ hermes_pins.worker.image.digest }}"
+hermes_worker_image_id: "{{ hermes_pins.worker.image.id | regex_replace('^sha256:', '') }}"
+hermes_worker_podman_as_user:
+  - sudo
+  - -u
+  - "{{ hermes_worker_user }}"
+  - env
+  - "XDG_RUNTIME_DIR=/run/user/{{ hermes_worker_uid }}"
+  - "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ hermes_worker_uid }}/bus"
+  - "HOME={{ hermes_worker_home }}"
+  - systemd-run
+  - --user
+  - --pipe
+  - --wait
+  - --quiet
+  - podman
