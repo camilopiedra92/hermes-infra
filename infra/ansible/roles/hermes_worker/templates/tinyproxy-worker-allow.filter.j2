@@ -1,0 +1,3 @@
+{% for host in hermes_pins.egress.domains + hermes_pins.egress.worker.extra_domains %}
+^{{ host | regex_escape }}$
+{% endfor %}

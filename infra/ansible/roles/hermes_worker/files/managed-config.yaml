@@ -9,7 +9,12 @@ telemetry:
     enabled: false
     send: false
 
+# Search and page reading go through one pinned free keyless vendor that fetches the pages itself, so the worker never
+# connects to an arbitrary host and a URL pointing at a private range cannot be reached from here.
 web:
+  backend: keenable
+  provider_tier:
+    keenable: free
   keyless_fallback: false
   keyless_rescue: false
 
@@ -19,6 +24,7 @@ gateway:
 # Terminal, files, skills and planning act inside the container. No cron, no delegation, no code-execution on the host.
 platform_toolsets:
   telegram:
+    - web
     - clarify
     - memory
     - session_search

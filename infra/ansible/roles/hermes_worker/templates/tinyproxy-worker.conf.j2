@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+# The proxy of the worker account: the names of the admin proxy plus the web search API. Nothing else resolves or connects.
+User {{ hermes_pins.egress.proxy_user }}
+Group {{ hermes_pins.egress.proxy_user }}
+Listen {{ hermes_pins.egress.nft.proxy_address }}
+Port {{ hermes_pins.egress.worker.proxy_port }}
+Allow {{ hermes_pins.egress.nft.proxy_address }}
+Timeout 600
+MaxClients 20
+DisableViaHeader Yes
+PidFile "/run/tinyproxy-worker/tinyproxy.pid"
+LogLevel Info
+ConnectPort 443
+Filter "/etc/tinyproxy/hermes-worker-allow.filter"
+FilterType ere
+FilterCaseSensitive Off
+FilterURLs Off
+FilterDefaultDeny Yes

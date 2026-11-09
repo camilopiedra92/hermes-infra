@@ -68,7 +68,24 @@
     group: root
     mode: "0755"
 
-- name: Pin the proxy of the gateway in a root-owned drop-in
+- name: Create the directory of the environment generators of user managers
+  ansible.builtin.file:
+    path: /etc/systemd/user-environment-generators
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Point each account at its own proxy
+  ansible.builtin.template:
+    src: egress-proxy-generator.j2
+    dest: /etc/systemd/user-environment-generators/61-hermes-egress-proxy
+    owner: root
+    group: root
+    mode: "0755"
+    validate: sh -n %s
+
+- name: Pin the gateway environment in a root-owned drop-in
   ansible.builtin.template:
     src: gateway-egress.conf.j2
     dest: "{{ hermes_pins.gateway.user_dropin_dir }}/20-egress.conf"

@@ -290,6 +290,9 @@
     creates: "{{ hermes_worker_home }}/.config/systemd/user/{{ hermes_worker_gateway_unit }}"
   when: not ansible_check_mode
 
+- name: Run the proxy of the worker
+  ansible.builtin.import_tasks: proxy.yml
+
 - name: Hold the worker behind the local proxy (fail closed)
   ansible.builtin.template:
     src: worker.nft.j2

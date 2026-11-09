@@ -15,7 +15,7 @@ table inet hermes_worker {
 
   chain output {
     type filter hook output priority -1; policy accept;
-    meta skuid {{ hermes_worker_uid }} oifname "lo" ip daddr 127.0.0.1 tcp dport 8888 counter name "hermes_worker_proxy" accept
+    meta skuid {{ hermes_worker_uid }} oifname "lo" ip daddr 127.0.0.1 tcp dport {{ hermes_pins.egress.worker.proxy_port }} counter name "hermes_worker_proxy" accept
     meta skuid {{ hermes_worker_uid }} oifname "lo" ip daddr 127.0.0.1 tcp dport 32768-60999 counter name "hermes_worker_loopback" accept
     meta skuid {{ hermes_worker_uid }} counter name "hermes_worker_held" drop
   }
